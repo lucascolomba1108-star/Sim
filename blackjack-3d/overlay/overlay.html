@@ -156,9 +156,9 @@ const DRAW = {
     const shake = cur.shake && f - since < 14 ? Math.sin((f - since) * 2.2) * 10 * (1 - (f - since) / 14) : 0;
     // anchor: left of the row, vertically centred on it
     const [ax, ay] = toScreen(e.u, e.v, f);
-    const fnt = font(800, 56), tw = measure(cur.label, fnt, -1);
+    const fnt = font(800, cur.label.length > 3 ? 44 : 56), tw = measure(cur.label, fnt, -1);
     const w = Math.max(116, tw + 52), h = 86;
-    const x = ax - w + shake, y = ay - h / 2;
+    const x = Math.max(22, ax - w) + shake, y = ay - h / 2;
     const sc = lerp(0.55, 1, pop);
     g.save(); g.globalAlpha = L.a;
     g.translate(x + w / 2, y + h / 2); g.scale(sc, sc); g.translate(-(x + w / 2), -(y + h / 2));
