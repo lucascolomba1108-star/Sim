@@ -225,6 +225,25 @@ const DRAW = {
     }
     g.restore();
   },
+  steps(e, f, L) {    // one glass panel, numbered lines appearing one by one
+    const rise = (1 - easeOut(L.pin)) * 24;
+    g.save(); g.globalAlpha = L.a;
+    const lh = e.lh || 66, fnt = font(700, e.size || 42, BODY);
+    const w = Math.max(...e.lines.map(l => measure(l.t, fnt))) + 170, h = lh * e.lines.length + 48;
+    const x = W / 2 - w / 2, y = e.y - h / 2 + rise;
+    glassPanel(x, y, w, h, 30);
+    e.lines.forEach((l, i) => {
+      const p = clamp((f - l.f0) / 10);
+      if (p <= 0) return;
+      g.save(); g.globalAlpha *= easeOut(p);
+      const cy = y + 24 + lh / 2 + i * lh, dx = (1 - easeOut(p)) * 20;
+      g.beginPath(); g.arc(x + 58 + dx, cy, 22, 0, Math.PI * 2); g.fillStyle = C.gold; g.fill();
+      text(String(i + 1), x + 58 + dx, cy + 2, font(800, 28, BODY), C.ink, { shadow: false });
+      text(l.t, x + 98 + dx, cy + 2, fnt, C.white, { align: 'left', shadow: false });
+      g.restore();
+    });
+    g.restore();
+  },
   lesson(e, f, L) {   // ✓ / ✗ verdict line
     const rise = (1 - easeOut(L.pin)) * 24;
     g.save(); g.globalAlpha = L.a;

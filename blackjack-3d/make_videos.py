@@ -456,15 +456,12 @@ def trailer_plan(no, hand, anchors):
         title([[seg("YOU MAKE", 116)], [seg("THE CALL.", 116, COL["gold"])]], 860, 9, 72, lh=120),
         title([[body("A blackjack series where you decide every hand.", 38)]], 1090, 18, 72, rise=24),
         tag("HOW IT WORKS", 300, 82, n, size=30, icon=False),
+        dict(type="steps", y=880, t0=c0 + 10, t1=n, fin=12, size=40, lh=64,
+             lines=[dict(t=t, f0=c0 + 16 + i * 30) for i, (_, t) in enumerate(steps)]),
         dict(type="badge", who="DEALER", u=du, v=dv, states=[dict(f=c0 + 4, **badge_style(d["up"]))], t0=c0 + 4, t1=n, fin=10),
         dict(type="badge", who="YOU", u=pu, v=pv, states=[dict(f=c0 + 8, **badge_style(d["player"]))], t0=c0 + 8, t1=n, fin=10),
-        title([[seg("HIT", 92, COL["hit"]), seg("or", 44, w=700, dy=6), seg("STAND?", 92, COL["stand"])]],
-              880, c0 + 70, n, pop=True, pulse=True, rise=0, gap=18),
-        tag("FOLLOW FOR EVERY HAND", 1000, c0 + 120, n, size=28),
+        tag("FOLLOW FOR EVERY HAND", 400, c0 + 116, n, size=28),
     ]
-    for i, (k, t) in enumerate(steps):
-        E.append(dict(type="caption", x=W / 2, y=400 + i * 92, t0=c0 + 14 + i * 26, t1=n, fin=12,
-                      lines=[dict(t=f"{k}.  {t}", size=40, w=700)], lh=52))
     return dict(frames=n, zoom=zoom, elements=E)
 
 
