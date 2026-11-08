@@ -340,6 +340,29 @@ def compose_episode(R, plan, out):
         enc.close()
 
 
+def compose_trailer(R, plan, out):
+    n = plan["frames"]
+    c0 = H.EP_INTRO + H.EP_CRANE
+    with tempfile.TemporaryDirectory() as tmp:
+        od = render_overlay(plan, tmp)
+        enc = Encoder(out)
+        intro = Image.open(os.path.join(R.shared, "intro.png")).convert("RGB")
+        hold = to_img(R.hold_full())
+        for f in range(n):
+            if f < H.EP_INTRO:
+                bg = zoomed(intro, 1 + (INTRO_ZOOM - 1) * ease_in_out(f / (H.EP_INTRO - 1)))
+            elif f < c0:
+                bg = to_img(R.crane(f - H.EP_INTRO))
+                if bg.size != (W, HT):
+                    bg = bg.resize((W, HT), Image.LANCZOS)
+            else:
+                bg = zoomed(hold, plan["zoom"][f])
+            frame = bg.convert("RGBA")
+            frame.alpha_composite(Image.open(os.path.join(od, f"{f:04d}.png")))
+            enc.write(frame.convert("RGB"))
+        enc.close()
+
+
 def compose_outcome(R, plan, action, out):
     n = plan["frames"]
     info = R.meta[action.lower()]
@@ -414,6 +437,37 @@ def write_guide(videos):
     open(os.path.join(videos, "GUIDE.md"), "w").write("\n".join(lines))
 
 
+def trailer_plan(no, hand, anchors):
+    """'How it works' reel for the series (pin it first). Reuses the intro, crane and hold of a hand."""
+    n = H.EP_INTRO + H.EP_CRANE + H.EP_HOLD
+    c0 = H.EP_INTRO + H.EP_CRANE
+    zoom = [1.0] * n
+    zh = ramp(n, c0, n - 1, 1.0, 1.06)
+    for f in range(c0, n):
+        zoom[f] = zh[f]
+    d = H.describe(hand)
+    du, dv = row_anchor(anchors["dealer_box"])
+    pu, pv = row_anchor(anchors["player_box"])
+    steps = [("1", "Watch the deal"), ("2", "Pick HIT or STAND"), ("3", "Watch what happens")]
+    E = [
+        dict(type="scrim", top=700, full=0.28, t0=0, t1=74, fin=0, fout=14),
+        dict(type="scrim", top=760, t0=c0 - 10, t1=n, fin=16, fout=0),
+        tag("INTERACTIVE BLACKJACK", 720, 3, 72),
+        title([[seg("YOU MAKE", 116)], [seg("THE CALL.", 116, COL["gold"])]], 860, 9, 72, lh=120),
+        title([[body("A blackjack series where you decide every hand.", 38)]], 1090, 18, 72, rise=24),
+        tag("HOW IT WORKS", 300, 82, n, size=30, icon=False),
+        dict(type="badge", who="DEALER", u=du, v=dv, states=[dict(f=c0 + 4, **badge_style(d["up"]))], t0=c0 + 4, t1=n, fin=10),
+        dict(type="badge", who="YOU", u=pu, v=pv, states=[dict(f=c0 + 8, **badge_style(d["player"]))], t0=c0 + 8, t1=n, fin=10),
+        title([[seg("HIT", 92, COL["hit"]), seg("or", 44, w=700, dy=6), seg("STAND?", 92, COL["stand"])]],
+              880, c0 + 70, n, pop=True, pulse=True, rise=0, gap=18),
+        tag("FOLLOW FOR EVERY HAND", 1000, c0 + 120, n, size=28),
+    ]
+    for i, (k, t) in enumerate(steps):
+        E.append(dict(type="caption", x=W / 2, y=400 + i * 92, t0=c0 + 14 + i * 26, t1=n, fin=12,
+                      lines=[dict(t=f"{k}.  {t}", size=40, w=700)], lh=52))
+    return dict(frames=n, zoom=zoom, elements=E)
+
+
 def cover_plans(no, hand, anchors):
     """Single-frame overlay plans for the three covers. Key text sits inside the 3:4
     profile-grid crop (y 240-1680). The decision covers do not spoil the result."""
@@ -466,6 +520,11 @@ def main():
     anchors = R.meta["anchors"]
     os.makedirs(a.out, exist_ok=True)
     only = a.only.split(",")
+    if "trailer" in only:
+        out = os.path.join(a.out, "00_series_trailer.mp4")
+        compose_trailer(R, trailer_plan(no, hand, anchors), out)
+        print("wrote", out, flush=True)
+        return
     if "episode" in only:
         out = os.path.join(a.out, f"hand{no:02d}_1_episode.mp4")
         compose_episode(R, episode_plan(no, hand, anchors), out)
