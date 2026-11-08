@@ -85,6 +85,18 @@ def episode_script(no, hand):
     ]
 
 
+def trailer_script():
+    """The series trailer (00_series_trailer.mp4): intro, crane, then the three steps one by one."""
+    c0 = H.EP_INTRO + H.EP_CRANE
+    return [
+        (4, "This is interactive blackjack. Every hand... you make the call."),
+        (c0 + 14, "Watch the deal."),                 # step 1 appears at c0+16
+        (c0 + 44, "Pick hit, or stand."),             # step 2 at c0+46
+        (c0 + 74, "Then watch what happens."),        # step 3 at c0+76
+        (c0 + 110, "Follow, so you never miss a hand."),
+    ]
+
+
 def outcome_script(no, hand, action):
     """Lines in RENDER frames of the outcome timeline (mapped to display frames later)."""
     tl = H.outcome_timeline(hand, action)
@@ -234,13 +246,24 @@ def write_video(src_video, out_video, audio):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("hands", type=int, nargs="+")
+    ap.add_argument("hands", type=int, nargs="*")
+    ap.add_argument("--trailer", action="store_true", help="also narrate 00_series_trailer.mp4")
     ap.add_argument("--voice", default=os.environ.get("ELEVENLABS_VOICE_ID", DEFAULT_VOICE))
     ap.add_argument("--videos", default=os.path.join(HERE, "videos"))
     ap.add_argument("--out", default=os.path.join(HERE, "videos_voice"))
     ap.add_argument("--script-only", action="store_true")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
+    if a.trailer:
+        lines = trailer_script()
+        md = ["# Series trailer: voice-over script", ""] + [f"- **{f / FPS:5.1f}s**  {t}" for f, t in lines]
+        open(os.path.join(a.out, "00_VOICE_trailer.md"), "w").write("\n".join(md) + "\n")
+        if not a.script_only:
+            src = os.path.join(a.videos, "00_series_trailer.mp4")
+            seconds = (H.EP_INTRO + H.EP_CRANE + M.TR_HOLD) / FPS
+            audio = voiced_mix(M.trailer_sound(1, H.HANDS[0]), lines, seconds, a.voice)
+            write_video(src, os.path.join(a.out, "00_series_trailer.mp4"), audio)
+            print("wrote", os.path.join(a.out, "00_series_trailer.mp4"), flush=True)
     for no in a.hands:
         hand = H.HANDS[no - 1]
         write_script_md(no, hand, os.path.join(a.out, f"hand{no:02d}_VOICE.md"))
