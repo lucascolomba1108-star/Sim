@@ -370,7 +370,8 @@ def write_guide(videos):
     ep_end0 = H.EP_INTRO + H.EP_CRANE + H.EP_HOLD + 14
     lines = [
         "# Interactive Blackjack: videos", "",
-        "Every hand has three Reels (1080x1920, 30 fps, no audio: add music in Edits).", "",
+        "Every hand has three Reels (1080x1920, 30 fps, no audio: add music in Edits) and a "
+        "cover image for each (`*_cover.jpg`, upload it as the Reel cover).", "",
         "## Posting order (per hand)",
         "1. Post `handNN_2_hit.mp4` and `handNN_3_stand.mp4` (the two decision reels).",
         "2. In Edits, open `handNN_1_episode.mp4` and drop those two reels into the end-card slots "
@@ -413,6 +414,45 @@ def write_guide(videos):
     open(os.path.join(videos, "GUIDE.md"), "w").write("\n".join(lines))
 
 
+def cover_plans(no, hand, anchors):
+    """Single-frame overlay plans for the three covers. Key text sits inside the 3:4
+    profile-grid crop (y 240-1680). The decision covers do not spoil the result."""
+    d = H.describe(hand)
+    on = dict(t0=-100, t1=100, fin=0, fout=0)
+    du, dv = row_anchor(anchors["dealer_box"])
+    pu, pv = row_anchor(anchors["player_box"])
+    badges = [dict(type="badge", who="DEALER", u=du, v=dv, states=[dict(f=-100, **badge_style(d["up"]))], **on),
+              dict(type="badge", who="YOU", u=pu, v=pv, states=[dict(f=-100, **badge_style(d["player"]))], **on)]
+    ep = [dict(type="scrim", top=700, full=0.22, band=[700, 1050], bandAlpha=0.5, **on),
+          dict(tag("INTERACTIVE BLACKJACK", 340, 0, 0), **on),
+          dict(title([[seg(f"HAND {no}", 124, COL["gold"])]], 812, 0, 0), **on),
+          dict(title([[seg("HIT", 100, COL["hit"]), seg("or", 48, w=700, dy=7), seg("STAND?", 100, COL["stand"])]], 938, 0, 0, gap=20), **on)
+          ] + badges
+    plans = {"episode": dict(frames=1, zoom=[1.0], elements=ep)}
+    for action in ("HIT", "STAND"):
+        acol = COL["hit"] if action == "HIT" else COL["stand"]
+        plans[action.lower()] = dict(frames=1, zoom=[1.0], elements=[
+            dict(type="scrim", full=0.5, **on),
+            dict(tag("INTERACTIVE BLACKJACK", 640, 0, 0), **on),
+            dict(title([[seg(f"HAND {no}", 92, COL["gold"])]], 770, 0, 0), **on),
+            dict(title([[seg("YOU CHOSE", 70, w=800)]], 880, 0, 0), **on),
+            dict(title([[seg(action, 200, acol, glow=acol)]], 1030, 0, 0), **on),
+            dict(title([[body(f"{d['player_short']} vs dealer {d['up']}. Did it pay off?", 44, w=700)]], 1186, 0, 0), **on),
+        ])
+    return plans
+
+
+def make_covers(R, no, hand, anchors, out_dir):
+    bg = zoomed(to_img(R.hold_full()), 1.0)
+    for name, plan in cover_plans(no, hand, anchors).items():
+        with tempfile.TemporaryDirectory() as tmp:
+            od = render_overlay(plan, tmp)
+            frame = bg.convert("RGBA")
+            frame.alpha_composite(Image.open(os.path.join(od, "0000.png")))
+            idx = {"episode": 1, "hit": 2, "stand": 3}[name]
+            frame.convert("RGB").save(os.path.join(out_dir, f"hand{no:02d}_{idx}_{name}_cover.jpg"), quality=95)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("hand", type=int)
@@ -435,6 +475,7 @@ def main():
             out = os.path.join(a.out, f"hand{no:02d}_{i}_{action.lower()}.mp4")
             compose_outcome(R, outcome_plan(no, hand, anchors, action), action, out)
             print("wrote", out, flush=True)
+    make_covers(R, no, hand, anchors, a.out)
     write_guide(a.out)
 
 

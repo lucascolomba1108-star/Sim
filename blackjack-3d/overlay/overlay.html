@@ -106,6 +106,10 @@ const DRAW = {
     if (e.top) { const gr = g.createLinearGradient(0, 0, 0, e.top); gr.addColorStop(0, 'rgba(0,0,0,0.62)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, e.top); }
     if (e.bottom) { const gr = g.createLinearGradient(0, H - e.bottom, 0, H); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.6)'); g.fillStyle = gr; g.fillRect(0, H - e.bottom, W, e.bottom); }
     if (e.full) { g.fillStyle = `rgba(0,0,0,${e.full})`; g.fillRect(0, 0, W, H); }
+    if (e.band) { const [b0, b1] = e.band, gr = g.createLinearGradient(0, b0, 0, b1);
+      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.3, `rgba(0,0,0,${e.bandAlpha ?? 0.5})`);
+      gr.addColorStop(0.7, `rgba(0,0,0,${e.bandAlpha ?? 0.5})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(0, b0, W, b1 - b0); }
     g.restore();
   },
   tag(e, f, L) {   // gold-outlined pill with a spade

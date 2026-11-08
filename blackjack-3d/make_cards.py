@@ -1,6 +1,7 @@
 """Generates the 52 card face textures + card back (PNG, transparent rounded corners).
 Run once with regular Python + Pillow:  python3 make_cards.py
 Textures are already committed, so you only need this to change the card design."""
+import math
 import os
 from PIL import Image, ImageDraw, ImageFont
 
@@ -72,13 +73,84 @@ def face(rank, suit):
         pf = font(SUIT_FONT, 120 * SS)
         for (px, py) in PIPS[rank]:
             glyph(img, s, pf, col, px * W, py * H, flip=py > 0.5)
-    else:  # J Q K: framed panel with big letter
-        m = 120 * SS
-        d.rounded_rectangle([m, m + 20 * SS, W - m, H - m - 20 * SS], 18 * SS,
-                            outline=col, width=5 * SS, fill=(248, 240, 220, 255))
-        glyph(img, rank, font(FACE_FONT, 250 * SS), col, W / 2, H / 2 - 60 * SS)
-        glyph(img, s, font(SUIT_FONT, 150 * SS), col, W / 2, H / 2 + 150 * SS)
+    else:
+        court(img, rank, suit, col)
     return img
+
+
+GOLD = (201, 158, 58, 255)
+GOLD_LIGHT = (232, 196, 106, 255)
+
+
+def crown(d, cx, cy, w, kind, col):
+    """Crown (K), tiara (Q) or plumed star (J), centred on (cx, cy)."""
+    h = w * 0.55
+    top, base = cy - h / 2, cy + h / 2
+    if kind == "J":
+        pts = []
+        for i in range(8):
+            r = w * (0.5 if i % 2 == 0 else 0.2)
+            a = math.pi / 2 + i * math.pi / 4
+            pts.append((cx + r * math.cos(a), cy - r * math.sin(a)))
+        d.polygon(pts, fill=GOLD, outline=col, width=3 * SS)
+        d.ellipse([cx - w * 0.09, cy - w * 0.09, cx + w * 0.09, cy + w * 0.09], fill=col)
+        return
+    tips = 5 if kind == "K" else 3
+    pts = [(cx - w / 2, base)]
+    for i in range(tips):
+        x = cx - w / 2 + w * i / (tips - 1)
+        tall = (i == tips // 2) and kind == "K"
+        pts.append((x, top - (h * 0.18 if tall else 0)))
+        if i < tips - 1:
+            pts.append((x + w / (tips - 1) / 2, top + h * (0.5 if kind == "K" else 0.62)))
+    pts.append((cx + w / 2, base))
+    d.polygon(pts, fill=GOLD, outline=col, width=3 * SS)
+    band = h * 0.22
+    d.rectangle([cx - w / 2, base - band, cx + w / 2, base], fill=GOLD_LIGHT, outline=col, width=3 * SS)
+    for i in range(tips):
+        x = cx - w / 2 + w * i / (tips - 1)
+        tall = (i == tips // 2) and kind == "K"
+        y = top - (h * 0.18 if tall else 0)
+        r = w * 0.055
+        d.ellipse([x - r, y - r, x + r, y + r], fill=col)
+    for i in range(3):    # jewels on the band
+        x = cx - w * 0.25 + w * 0.25 * i
+        r = band * 0.28
+        d.ellipse([x - r, base - band / 2 - r, x + r, base - band / 2 + r], fill=col)
+
+
+def court(img, rank, suit, col):
+    """Double-headed court card: ornate frame, crown/plume, letter, mirrored halves."""
+    mx, my = 118 * SS, 132 * SS
+    fw, fh = W - 2 * mx, H - 2 * my
+    panel = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+    pd = ImageDraw.Draw(panel)
+    pd.rounded_rectangle([0, 0, fw - 1, fh - 1], 16 * SS, fill=(250, 243, 226, 255))
+    half = Image.new("RGBA", (fw, fh // 2), (0, 0, 0, 0))
+    hd = ImageDraw.Draw(half)
+    for i in range(14):    # soft gold rays behind the emblem
+        a = -math.pi * i / 13
+        x1 = fw / 2 + math.cos(a) * fw
+        y1 = fh * 0.2 + math.sin(a) * fw
+        hd.line([(fw / 2, fh * 0.2), (x1, y1)], fill=(236, 214, 160, 255), width=10 * SS)
+    crown(hd, fw / 2, fh * 0.13, fw * 0.42, rank, col)
+    glyph(half, rank, font(FACE_FONT, 150 * SS), col, fw / 2, fh * 0.3)
+    sf = font(SUIT_FONT, 54 * SS)
+    glyph(half, SUITS[suit], sf, col, fw * 0.2, fh * 0.3)
+    glyph(half, SUITS[suit], sf, col, fw * 0.8, fh * 0.3)
+    panel.alpha_composite(half, (0, 0))
+    panel.alpha_composite(half.rotate(180), (0, fh - half.height))
+    pd = ImageDraw.Draw(panel)
+    pd.line([(fw * 0.08, fh / 2), (fw * 0.92, fh / 2)], fill=GOLD, width=3 * SS)
+    r = 14 * SS
+    pd.polygon([(fw / 2, fh / 2 - r), (fw / 2 + r, fh / 2), (fw / 2, fh / 2 + r), (fw / 2 - r, fh / 2)], fill=col)
+    mask = Image.new("L", (fw, fh), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, fw - 1, fh - 1], 16 * SS, fill=255)
+    img.paste(panel, (mx, my), mask)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([mx, my, mx + fw, my + fh], 16 * SS, outline=col, width=5 * SS)
+    d.rounded_rectangle([mx + 9 * SS, my + 9 * SS, mx + fw - 9 * SS, my + fh - 9 * SS], 12 * SS,
+                        outline=GOLD, width=2 * SS)
 
 
 def back():
