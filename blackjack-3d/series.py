@@ -58,10 +58,14 @@ def main():
             print(f"hand {no}: already done", flush=True)
             continue
         t = time.time()
-        run(blender_cmd(a, ["--hand", str(no)]), a.log)
-        t3d = time.time() - t
-        run([sys.executable, os.path.join(HERE, "make_videos.py"), str(no), "--render", a.render,
-             "--out", a.videos], a.log)
+        try:
+            run(blender_cmd(a, ["--hand", str(no)]), a.log)
+            t3d = time.time() - t
+            run([sys.executable, os.path.join(HERE, "make_videos.py"), str(no), "--render", a.render,
+                 "--out", a.videos], a.log)
+        except SystemExit as e:          # keep going with the next hand
+            print(f"hand {no}: FAILED ({e})", flush=True)
+            continue
         print(f"hand {no}: done (3D {t3d / 60:.0f} min, total {(time.time() - t) / 60:.0f} min)", flush=True)
 
 
