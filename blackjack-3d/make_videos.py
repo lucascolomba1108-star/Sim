@@ -386,13 +386,24 @@ def compose_outcome(R, plan, action, out):
     with tempfile.TemporaryDirectory() as tmp:
         od = render_overlay(plan, tmp)
         enc = Encoder(out)
-        running = R.hold_full()
-        sc = R.scale(running)
+        # `settled` only changes on frames where the motion has come to rest (a still run
+        # starts there). Moving frames are drawn as settled + their crop and never stored,
+        # so faint changes (a passing shadow) can't leave residue behind.
+        settled = R.hold_full()
+        sc = R.scale(settled)
+        shown = settled
         for f in range(n):
             if src[f] == f and str(f) in rects and rects[str(f)]:
                 crop = C.load(os.path.join(R.hand, action.lower(), f"{f:04d}.png"))
-                running = C.paste(running, crop, rects[str(f)], sc)
-            bg = soften(zoomed(to_img(running), plan["zoom"][f]), ease_in_out((f - ls) / 14) if f >= ls else 0)
+                rest = f == n - 1 or src[f + 1] == f
+                if rest:
+                    settled = C.paste(settled, crop, rects[str(f)], sc)
+                    shown = settled
+                else:
+                    shown = C.paste(settled, crop, rects[str(f)], sc)
+            elif src[f] != f:
+                shown = settled
+            bg = soften(zoomed(to_img(shown), plan["zoom"][f]), ease_in_out((f - ls) / 14) if f >= ls else 0)
             ov = Image.open(os.path.join(od, f"{f:04d}.png"))
             frame = bg.convert("RGBA")
             frame.alpha_composite(ov)
