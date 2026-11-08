@@ -61,6 +61,11 @@ def spoken_total(cards):
     return ("soft " if soft and t < 21 else "") + num(t)
 
 
+def up_short(code):
+    """Matches the on-screen caption: "Dealer shows 10." / "Dealer shows an Ace."."""
+    return "an ace" if H.rank(code) == "A" else num(H.value(code))
+
+
 def up_spoken(code):
     return article("ace" if H.rank(code) == "A" else num(H.value(code)))
 
@@ -73,7 +78,8 @@ def episode_script(no, hand):
              else f"Interactive blackjack. Hand {num(no)}. You make the call.")
     return [
         (4, intro),
-        (c0 + 18, f"You've got {spoken_total(hand['player'])}. The dealer shows {up_spoken(hand['up'])}."),
+        # starts with the total badges (c0+6/c0+12), a beat before the caption (c0+18): 2.4 s is too tight
+        (c0 + 10, f"You have {spoken_total(hand['player'])}, dealer shows {up_short(hand['up'])}."),
         (c0 + 93, "Hit... or stand? Comment your move."),
         (end0 + 10, "Now pick your reel... and see what happens."),
     ]
@@ -86,23 +92,26 @@ def outcome_script(no, hand, action):
     lines = [(8, f"You chose to {'hit' if action == 'HIT' else 'stand'}.")]
     player, dealer = list(hand["player"]), [hand["up"]]
     for ev in tl["events"]:
+        # Cards land ~0.7-1 s apart, so these pieces are short (no "...", which ElevenLabs
+        # turns into a long pause) and close ones are merged into one line by merge_close().
         k = ev["kind"]
         if k == "player_draw":
             player.append(ev["card"])
             t = H.total(player)[0]
-            tail = f"{num(t).capitalize()}!" if t == 21 else (f"{num(t).capitalize()}. Bust!" if t > 21 else f"{num(t).capitalize()}.")
-            lines.append((ev["land"] - 2, f"{card_bare(ev['card'])}... {tail}"))
+            tail = f"{num(t)}!" if t == 21 else (f"{num(t)}. Bust!" if t > 21 else f"{num(t)}.")
+            lines.append((ev["land"] - 2, f"{card_bare(ev['card'])}, {tail}"))
         elif k in ("dealer_reveal", "dealer_draw"):
             dealer.append(ev["card"])
             t = H.total(dealer)[0]
+            more = any(e["kind"] == "dealer_draw" and e["start"] > ev["start"] for e in tl["events"])
             if H.total(player)[0] > 21:
                 text = f"Dealer had {num(t)}."
             elif t > 21:
-                text = f"{card_bare(ev['card'])}... dealer busts!"
+                text = f"{card_bare(ev['card'])}. Dealer busts!"
             elif k == "dealer_reveal":
-                text = f"Dealer, {num(t)}." + (" Must hit." if t < 17 else "")
+                text = f"Dealer has {num(t)}." + (" Must hit." if t < 17 and not more else "")
             else:
-                text = f"{card_bare(ev['card'])}... {num(t)}."
+                text = f"{card_bare(ev['card'])}, {num(t)}."
             lines.append((ev["land"] - 2, text))
         elif k == "settle":
             text = {"win": "You win!", "lose": "You lose.", "bust": "House wins.", "push": "Push."}[ev["result"]]
@@ -113,13 +122,27 @@ def outcome_script(no, hand, action):
     return lines, tl
 
 
+SEC_PER_CHAR = 0.075                        # measured on the "Adam" lines, with a margin
+
+
+def merge_close(lines):
+    """Join a line into the previous one when it would start before the previous one is spoken."""
+    out = []
+    for f, t in lines:
+        if out and f < out[-1][0] + (len(out[-1][1]) * SEC_PER_CHAR + 0.15) * FPS:
+            out[-1] = (out[-1][0], out[-1][1] + " " + t)
+        else:
+            out.append((f, t))
+    return out
+
+
 def all_scripts(no, hand):
     """{video: [(display_frame, text)]} for the episode, HIT and STAND videos."""
     out = {"episode": episode_script(no, hand)}
     for action in ("HIT", "STAND"):
         lines, tl = outcome_script(no, hand, action)
         src, disp, end_start = M.outcome_display(tl)
-        mapped = [(disp(f), t) for f, t in lines]
+        mapped = merge_close([(disp(f), t) for f, t in lines])
         mapped.append((end_start + 10, "The full hand is on my profile."))
         out[action.lower()] = mapped
     return out
