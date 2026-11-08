@@ -1,0 +1,227 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Blackjack Reel</title>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+const W = 1080, H = 1920;
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+const CW = 250, CH = 350;
+const SHOE = { x: 1000, y: -200 };
+
+// ---------- easing / helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const prog = (t, s, d) => clamp((t - s) / d);
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+const easeBack = p => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+const lerp = (a, b, p) => a + (b - a) * p;
+
+function rr(x, y, w, h, r) {
+  g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+}
+
+// ---------- table ----------
+function drawTable() {
+  const rg = g.createRadialGradient(W / 2, H * 0.42, 100, W / 2, H * 0.45, 1300);
+  rg.addColorStop(0, '#1f7a4a'); rg.addColorStop(0.55, '#125c35'); rg.addColorStop(1, '#062915');
+  g.fillStyle = rg; g.fillRect(0, 0, W, H);
+  // felt noise
+  g.globalAlpha = 0.05;
+  for (let i = 0; i < 2500; i++) {
+    const x = (i * 7919) % W, y = (i * 104729) % H;
+    g.fillStyle = i % 2 ? '#000' : '#fff'; g.fillRect(x, y, 2, 2);
+  }
+  g.globalAlpha = 1;
+  // printed arcs
+  g.strokeStyle = 'rgba(230,200,120,0.55)'; g.lineWidth = 4;
+  g.beginPath(); g.arc(W / 2, 560, 1000, Math.PI * 0.28, Math.PI * 0.72); g.stroke();
+  g.beginPath(); g.arc(W / 2, 560, 880, Math.PI * 0.3, Math.PI * 0.7); g.stroke();
+  arcText('BLACKJACK PAYS 3 TO 2', W / 2, 560, 940, Math.PI / 2, 'bold 38px Inter', 'rgba(240,210,130,0.75)');
+  arcText('DEALER MUST STAND ON 17', W / 2, 560, 1005, Math.PI / 2, '600 26px Inter', 'rgba(255,255,255,0.35)');
+  // betting circle + chips
+  g.strokeStyle = 'rgba(255,255,255,0.45)'; g.lineWidth = 4;
+  g.beginPath(); g.arc(W / 2, 1700, 95, 0, Math.PI * 2); g.stroke();
+  chipStack(W / 2, 1720, 4, '#c62828');
+  chipStack(W / 2 - 230, 1780, 3, '#1565c0');
+  chipStack(W / 2 + 230, 1780, 5, '#222');
+}
+function arcText(txt, cx, cy, r, mid, font, color) {
+  g.save(); g.font = font; g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const total = g.measureText(txt).width; let a = mid + total / r / 2;
+  for (const ch of txt) {
+    const w = g.measureText(ch).width; a -= w / r / 2;
+    g.save(); g.translate(cx + r * Math.cos(a), cy + r * Math.sin(a)); g.rotate(a - Math.PI / 2); g.fillText(ch, 0, 0); g.restore();
+    a -= w / r / 2;
+  }
+  g.restore();
+}
+function chipStack(x, y, n, col) {
+  for (let i = 0; i < n; i++) {
+    const yy = y - i * 12;
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(x, yy + 8, 52, 20, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = col; g.beginPath(); g.ellipse(x, yy, 52, 20, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#fff'; g.lineWidth = 5; g.setLineDash([10, 12]);
+    g.beginPath(); g.ellipse(x, yy, 44, 16, 0, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+  }
+}
+
+// ---------- cards ----------
+const RED = s => s === '♥' || s === '♦';
+function drawCard(card, x, y, rot, flip, scale = 1) {
+  // flip: 0 = back, 1 = face (animated through 0.5)
+  const sx = Math.abs(Math.cos(flip * Math.PI)) * scale;
+  const faceUp = flip >= 0.5;
+  g.save(); g.translate(x, y); g.rotate(rot); g.scale(Math.max(sx, 0.001), scale);
+  g.shadowColor = 'rgba(0,0,0,0.45)'; g.shadowBlur = 30; g.shadowOffsetY = 14;
+  rr(-CW / 2, -CH / 2, CW, CH, 22); g.fillStyle = '#fff'; g.fill();
+  g.shadowColor = 'transparent';
+  if (!faceUp) {
+    rr(-CW / 2 + 14, -CH / 2 + 14, CW - 28, CH - 28, 14); g.fillStyle = '#9b1c1c'; g.fill();
+    g.save(); g.clip(); g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = 4;
+    for (let i = -CH; i < CH; i += 28) { g.beginPath(); g.moveTo(-CW, i); g.lineTo(CW, i + CW * 1.2); g.stroke(); g.beginPath(); g.moveTo(CW, i); g.lineTo(-CW, i + CW * 1.2); g.stroke(); }
+    g.restore();
+    rr(-CW / 2 + 14, -CH / 2 + 14, CW - 28, CH - 28, 14); g.strokeStyle = '#e8c46a'; g.lineWidth = 4; g.stroke();
+  } else {
+    const col = RED(card.s) ? '#d32f2f' : '#111';
+    g.fillStyle = col; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 66px Inter'; g.fillText(card.r, -CW / 2 + 44, -CH / 2 + 52);
+    g.font = '50px DejaVu Sans'; g.fillText(card.s, -CW / 2 + 44, -CH / 2 + 110);
+    g.save(); g.rotate(Math.PI);
+    g.font = 'bold 66px Inter'; g.fillText(card.r, -CW / 2 + 44, -CH / 2 + 52);
+    g.font = '50px DejaVu Sans'; g.fillText(card.s, -CW / 2 + 44, -CH / 2 + 110);
+    g.restore();
+    g.font = '150px DejaVu Sans'; g.fillText(card.s, 10, 20);
+  }
+  g.restore();
+}
+// deal animation: card flies from shoe to target, flips while landing
+function dealt(card, t, start, tx, ty, trot, faceUp = true, flipAt = null) {
+  if (t < start) return;
+  const p = easeOut(prog(t, start, 0.45));
+  const x = lerp(SHOE.x, tx, p), y = lerp(SHOE.y, ty, p), rot = lerp(-0.9, trot, p);
+  let flip = faceUp ? clamp((p - 0.4) / 0.6) : 0;
+  if (flipAt !== null) flip = easeOut(prog(t, flipAt, 0.35));
+  drawCard(card, x, y, rot, flip);
+}
+
+// ---------- text / UI ----------
+function badge(txt, x, y, a, col = '#111', fg = '#fff', s = 1) {
+  if (a <= 0) return;
+  g.save(); g.globalAlpha = a; g.translate(x, y); g.scale(s, s);
+  g.font = '800 54px Inter'; const w = Math.max(110, g.measureText(txt).width + 50);
+  g.shadowColor = 'rgba(0,0,0,0.5)'; g.shadowBlur = 20;
+  rr(-w / 2, -42, w, 84, 42); g.fillStyle = col; g.fill(); g.shadowColor = 'transparent';
+  g.lineWidth = 4; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.stroke();
+  g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, 0, 3);
+  g.restore();
+}
+function label(txt, x, y, size, a, color = '#fff', weight = 800, s = 1) {
+  if (a <= 0) return;
+  g.save(); g.globalAlpha = a; g.translate(x, y); g.scale(s, s);
+  g.font = `${weight} ${size}px Inter`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round'; g.lineWidth = size * 0.16; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.strokeText(txt, 0, 0);
+  g.fillStyle = color; g.fillText(txt, 0, 0); g.restore();
+}
+function panel(lines, y, a, s = 1) {
+  if (a <= 0) return;
+  g.save(); g.globalAlpha = a; g.translate(W / 2, y); g.scale(s, s);
+  const h = 90 + (lines.length - 1) * 74;
+  rr(-440, -h / 2, 880, h, 30); g.fillStyle = 'rgba(0,0,0,0.62)'; g.fill();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  lines.forEach((l, i) => { g.font = `${l.w || 800} ${l.size || 52}px Inter`; g.fillStyle = l.c || '#fff'; g.fillText(l.t, 0, -h / 2 + 45 + i * 74 + 2); });
+  g.restore();
+}
+function flash(t, at, col) {
+  const p = prog(t, at, 0.5); if (p <= 0 || p >= 1) return;
+  g.fillStyle = col; g.globalAlpha = 0.35 * (1 - p); g.fillRect(0, 0, W, H); g.globalAlpha = 1;
+}
+function fadeIn(t, at, d = 0.35) { const p = prog(t, at, d); if (p < 1) { g.fillStyle = '#000'; g.globalAlpha = 1 - p; g.fillRect(0, 0, W, H); g.globalAlpha = 1; } }
+function fadeOut(t, at, d = 0.35) { const p = prog(t, at, d); if (p > 0) { g.fillStyle = '#000'; g.globalAlpha = p; g.fillRect(0, 0, W, H); g.globalAlpha = 1; } }
+
+// ---------- layout ----------
+const DEALER_Y = 640, PLAYER_Y = 1180;
+const D1 = { r: '10', s: '♣' }, DH = { r: '7', s: '♠' };
+const P1 = { r: '10', s: '♠' }, P2 = { r: '6', s: '♥' }, P3 = { r: '5', s: '♦' };
+const dPos = i => W / 2 - 75 + i * 150;
+const pPos = (i, n) => W / 2 - (n - 1) * 75 + i * 150;
+const zoneLabel = (txt, y, a) => label(txt, W / 2, y, 30, a * 0.8, '#e8d9a8', 700);
+
+// ---------- SCENE 1: the question (9s) ----------
+function scene1(t) {
+  drawTable();
+  label('HAND #1', W / 2, 270, 46, easeOut(prog(t, 0.1, 0.4)), '#f5d77a', 900);
+  zoneLabel('DEALER', DEALER_Y - 230, prog(t, 0.2, 0.4));
+  zoneLabel('YOU', PLAYER_Y + 230, prog(t, 0.2, 0.4));
+  dealt(P1, t, 0.3, pPos(0, 2), PLAYER_Y, -0.05);
+  dealt(D1, t, 0.7, dPos(0), DEALER_Y, -0.04);
+  dealt(P2, t, 1.1, pPos(1, 2), PLAYER_Y, 0.05);
+  dealt(DH, t, 1.5, dPos(1), DEALER_Y, 0.04, false);
+  badge('10', W / 2 + 290, DEALER_Y, easeOut(prog(t, 2.0, 0.3)), '#111', '#fff', easeBack(prog(t, 2.0, 0.35)));
+  badge('16', W / 2 + 290, PLAYER_Y, easeOut(prog(t, 2.1, 0.3)), '#111', '#fff', easeBack(prog(t, 2.1, 0.35)));
+  // the question
+  const qa = prog(t, 3.2, 0.3);
+  if (qa > 0) { g.fillStyle = 'rgba(0,0,0,' + 0.35 * qa + ')'; g.fillRect(0, 0, W, H); }
+  const pulse = 1 + 0.04 * Math.sin(Math.max(0, t - 3.6) * 6);
+  label('HIT', 190, 300, 120, qa, '#4ade80', 900, easeBack(qa) * pulse);
+  label('or', 375, 305, 60, qa, '#fff', 700);
+  label('STAND?', 690, 300, 120, qa, '#f87171', 900, easeBack(qa) * pulse);
+  label('16 vs dealer 10. What do you do?', W / 2, 410, 40, prog(t, 3.6, 0.3), '#fff', 700);
+  // poll space marker between hands
+  label('VOTE BELOW', W / 2, 910, 44, prog(t, 4.0, 0.3) * (0.7 + 0.3 * Math.sin(t * 5)), '#f5d77a', 900);
+  fadeIn(t, 0);
+}
+
+// ---------- SCENE 2: the answer (14s) ----------
+function scene2(t) {
+  drawTable();
+  // Part A: STAND (0 - 5.2)
+  if (t < 5.4) {
+    label('THE ANSWER', W / 2, 270, 46, 1, '#f5d77a', 900);
+    zoneLabel('DEALER', DEALER_Y - 230, 1); zoneLabel('YOU', PLAYER_Y + 230, 1);
+    drawCard(P1, pPos(0, 2), PLAYER_Y, -0.05, 1); drawCard(P2, pPos(1, 2), PLAYER_Y, 0.05, 1);
+    drawCard(D1, dPos(0), DEALER_Y, -0.04, 1);
+    drawCard(DH, dPos(1), DEALER_Y, 0.04, easeOut(prog(t, 1.6, 0.35)));
+    badge(t < 1.9 ? '10' : '17', W / 2 + 290, DEALER_Y, 1, '#111', '#fff', t < 1.9 ? 1 : easeBack(prog(t, 1.9, 0.3)));
+    badge('16', W / 2 + 290, PLAYER_Y, 1, t > 2.4 ? '#b91c1c' : '#111');
+    panel([{ t: 'If you STAND...', c: '#f87171', size: 60, w: 900 }], 910, easeOut(prog(t, 0.3, 0.3)) * (t < 2.4 ? 1 : 0));
+    if (t >= 2.4) panel([{ t: 'Dealer 17 beats 16', size: 50 }, { t: 'YOU LOSE', c: '#f87171', size: 76, w: 900 }], 910, 1, easeBack(prog(t, 2.4, 0.35)));
+    flash(t, 2.4, '#ff0000');
+    fadeOut(t, 4.9, 0.4);
+    fadeIn(t, 0, 0.25);
+    return;
+  }
+  // Part B: HIT (5.4 - 10.2)
+  const u = t - 5.4;
+  if (t < 10.4) {
+    label('THE ANSWER', W / 2, 270, 46, 1, '#f5d77a', 900);
+    zoneLabel('DEALER', DEALER_Y - 230, 1); zoneLabel('YOU', PLAYER_Y + 230, 1);
+    const sp = easeOut(prog(u, 1.0, 0.35));
+    drawCard(P1, lerp(pPos(0, 2), pPos(0, 3), sp), PLAYER_Y, -0.05, 1);
+    drawCard(P2, lerp(pPos(1, 2), pPos(1, 3), sp), PLAYER_Y, 0.05, 1);
+    dealt(P3, u, 1.1, pPos(2, 3), PLAYER_Y, 0.08);
+    drawCard(D1, dPos(0), DEALER_Y, -0.04, 1);
+    drawCard(DH, dPos(1), DEALER_Y, 0.04, easeOut(prog(u, 2.6, 0.35)));
+    badge(u < 2.9 ? '10' : '17', W / 2 + 290, DEALER_Y, 1, '#111', '#fff', u < 2.9 ? 1 : easeBack(prog(u, 2.9, 0.3)));
+    const got21 = u >= 1.6;
+    badge(got21 ? '21' : '16', got21 ? W / 2 + 360 : W / 2 + 290, PLAYER_Y, 1, got21 ? '#ca8a04' : '#111', '#fff', got21 ? easeBack(prog(u, 1.6, 0.35)) : 1);
+    panel([{ t: 'If you HIT...', c: '#4ade80', size: 60, w: 900 }], 910, easeOut(prog(u, 0.2, 0.3)) * (u < 3.4 ? 1 : 0));
+    if (u >= 3.4) panel([{ t: '21 beats 17', size: 50 }, { t: 'YOU WIN', c: '#4ade80', size: 76, w: 900 }], 910, 1, easeBack(prog(u, 3.4, 0.35)));
+    flash(u, 1.6, '#ffd54a'); flash(u, 3.4, '#00ff66');
+    fadeIn(u, 0, 0.3);
+    fadeOut(u, 4.6, 0.4);
+    return;
+  }
+  // Part C: lesson end card
+  const v = t - 10.4;
+  g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, 0, W, H);
+  label('BASIC STRATEGY', W / 2, 640, 70, easeOut(prog(v, 0.1, 0.3)), '#f5d77a', 900);
+  label('16 vs 10  =  HIT', W / 2, 800, 96, easeOut(prog(v, 0.35, 0.3)), '#4ade80', 900, easeBack(prog(v, 0.35, 0.35)));
+  label('Standing loses more often.', W / 2, 930, 44, prog(v, 0.7, 0.3), '#fff', 700);
+  label('Did you get it right?', W / 2, 1150, 58, prog(v, 1.2, 0.3), '#fff', 800);
+  label('Follow for Hand #2', W / 2, 1260, 50, prog(v, 1.6, 0.3) * (0.75 + 0.25 * Math.sin(v * 5)), '#f5d77a', 900);
+  fadeIn(v, 0, 0.3);
+}
+
+window.SCENES = { scene1: { fn: scene1, dur: 9 }, scene2: { fn: scene2, dur: 14 } };
+window.renderAt = (name, t) => { g.clearRect(0, 0, W, H); SCENES[name].fn(t); return true; };
+</script></body></html>
