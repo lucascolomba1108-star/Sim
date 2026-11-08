@@ -28,6 +28,8 @@ SLOT_CORNER = dict(x=36, y=262, w=180, h=320)
 INTRO_ZOOM = 1.08                      # intro still is rendered 8% wider: ends on crane frame 0
 HOLD_ZOOM = (1.0, 1.10)                # slow push-in on the hold plate (110% overscan)
 OUT_ZOOM = (1.0, 1.06)
+TR_HOLD = 195                          # trailer hold length (frames)
+END_SCREEN = 180                       # "what's next" screen at the end of the HIT / STAND videos
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -154,11 +156,34 @@ def episode_plan(no, hand, anchors):
     return dict(frames=n, zoom=zoom, elements=E)
 
 
+def outcome_display(tl):
+    """The 3D timeline is fixed (it was rendered); viewers get extra time by holding
+    still moments: the recap, the result, the lesson, plus a 'what's next' screen.
+    Returns (render frame for each display frame, render->display mapping, end-screen start)."""
+    total, ls = tl["total"], tl["lesson_start"]
+    st = next(e for e in tl["events"] if e["kind"] == "settle")
+    rest = (st["chips_end"] or st["start"]) + 4
+    holds = {60: 15, rest: 24, ls + 60: 15}
+    src = []
+    for f in range(total):
+        src.append(f)
+        src += [f] * holds.get(f, 0)
+    end_start = len(src)
+    src += [total - 1] * END_SCREEN
+
+    def disp(f):
+        return f + sum(h for k, h in holds.items() if k < f)
+    return src, disp, end_start
+
+
 def outcome_plan(no, hand, anchors, action):
     d = H.describe(hand)
     tl = H.outcome_timeline(hand, action)
     b, n, ls = tl["branch"], tl["total"], tl["lesson_start"]
-    zoom = ramp(n, 0, n - 1, *OUT_ZOOM)
+    src, disp, end_start = outcome_display(tl)
+    D = len(src)
+    zoom = [z for z in ramp(D, 0, D - 1, *OUT_ZOOM)]
+    rz = [zoom[disp(f)] for f in range(n)]      # zoom seen at each render frame
     acol = COL["hit"] if action == "HIT" else COL["stand"]
     cx = 640
     E = [
@@ -168,7 +193,6 @@ def outcome_plan(no, hand, anchors, action):
         title([[seg("YOU CHOSE", 70, w=800)]], 820, 6, 70, rise=30),
         title([[seg(action, 196, acol, glow=acol)]], 968, 10, 70, pop=True, rise=0),
         title([[body(f"Hand {no}  ·  You had {d['player_short']} vs dealer {d['up']}", 42)]], 1118, 18, 70, rise=20),
-        corner_slot(6, ls),
     ]
     # running totals for the two badges
     player, dealer = list(hand["player"]), [hand["up"]]
@@ -215,7 +239,7 @@ def outcome_plan(no, hand, anchors, action):
             else:
                 ban = dict(text="YOU LOSE", color=COL["stand"], sub=f"{dt} beats {pt}")
             caps.append((s0 - 1, None))
-            yb = mid_y(anchors, zoom[s0])
+            yb = mid_y(anchors, rz[s0])
             E.append(dict(type="banner", y=yb, t0=s0, t1=ls - 4, fin=0, fout=12, size=150, **ban))
             E.append(dict(type="flash", color=ban["color"], y=yb, t0=s0, t1=s0 + 18, fin=0, fout=0, alpha=0.3))
             if res == "win":
@@ -224,8 +248,8 @@ def outcome_plan(no, hand, anchors, action):
     for i, (f0, line) in enumerate(caps):
         if line is None:
             continue
-        f1 = caps[i + 1][0] - 2 if i + 1 < len(caps) else ls
-        E.append(dict(type="caption", x=cx, maxw=780, y=340, t0=f0, t1=f1, fin=8, fout=8,
+        f1 = caps[i + 1][0] - 9 if i + 1 < len(caps) else ls     # fully gone before the next one
+        E.append(dict(type="caption", x=cx, maxw=780, y=340, t0=f0, t1=f1, fin=8, fout=7,
                       lines=[dict(t=line, size=44, w=800)]))
     du, dv = row_anchor(anchors["dealer_box"])
     pu, pv = row_anchor(anchors["player_box"])
@@ -250,10 +274,26 @@ def outcome_plan(no, hand, anchors, action):
         dict(type="lesson", ok=ok, text=verdict, y=970, t0=ls + 22, t1=n, fin=12),
         title([[body("Basic strategy  ·  dealer stands on all 17s", 30, "rgba(255,255,255,0.62)", w=500)]], 1062, ls + 28, n, rise=10),
         title([[body("Did you call it right? Tell us in the comments.", 36, w=600)]], 1170, ls + 34, n, rise=12),
-        tag(f"FOLLOW FOR HAND {no + 1}", 1270, ls + 40, n, size=30),
     ]
-    blur = (ls, n)
-    return dict(frames=n, zoom=zoom, elements=E, blur=blur)
+    # render frames -> display frames
+    for e in E:
+        e["t0"], e["t1"] = disp(e["t0"]), disp(e["t1"])
+        for st in e.get("states", []):
+            st["f"] = disp(st["f"])
+    # end screen: go back to the hand, or see the other choice
+    other = "STAND" if action == "HIT" else "HIT"
+    ocol = COL["hit"] if other == "HIT" else COL["stand"]
+    es = end_start
+    E += [
+        title([[seg("WHAT'S NEXT?", 104)]], 330, es + 4, D, rise=30),
+        title([[body("Go back to the hand, or see the other choice", 38)]], 432, es + 10, D, rise=20),
+        dict(type="slot", label="THE HAND", lsize=34, color=COL["gold"], x=130, y=560, w=380, h=676,
+             t0=es + 14, t1=D, fin=14),
+        dict(type="slot", label=f"IF YOU {'HIT' if other == 'HIT' else 'STOOD'}", lsize=34, color=ocol,
+             x=570, y=560, w=380, h=676, t0=es + 20, t1=D, fin=14),
+        tag(f"FOLLOW FOR HAND {no + 1}", 1330, es + 28, D, size=30),
+    ]
+    return dict(frames=D, zoom=zoom, elements=E, blur=(disp(ls), D), src=src, end_start=es)
 
 
 # ----------------------------------------------------------------------------- sound
@@ -333,7 +373,10 @@ def episode_sound(no, hand):
 
 def outcome_sound(no, hand, action):
     tl = H.outcome_timeline(hand, action)
-    m = Mix(tl["total"] / FPS)
+    src, disp, end_start = outcome_display(tl)
+    m = Mix(len(src) / FPS)
+    add = m.add
+    m.add = lambda name, frame, gain=0.0, pan=0.0: add(name, disp(frame), gain, pan)
     m.add("chipsStack2", 10, -8.0)
     for k, ev in enumerate(tl["events"]):
         kind, key = ev["kind"], no * 7 + k
@@ -356,11 +399,14 @@ def outcome_sound(no, hand, action):
                 m.add("chipLay3", ev["start"], -8.0)
     m.add("cardFan2", tl["lesson_start"] - 6, -9.0)
     m.add("chipLay2", tl["lesson_start"] + 22, -14.0)
-    return m, tl["total"]
+    add("cardFan1", end_start - 2, -8.0)              # display frames from here on
+    add("chipLay2", end_start + 14, -13.0, -0.3)
+    add("chipLay1", end_start + 20, -13.0, 0.3)
+    return m, len(src)
 
 
 def trailer_sound(no, hand):
-    m = Mix((H.EP_INTRO + H.EP_CRANE + H.EP_HOLD) / FPS)
+    m = Mix((H.EP_INTRO + H.EP_CRANE + TR_HOLD) / FPS)
     c0 = H.EP_INTRO + H.EP_CRANE
     m.add("cardShuffle", 2, -9.0)
     for i, f in enumerate(H.CRANE_DEALS):
@@ -522,6 +568,7 @@ def compose_outcome(R, plan, action, out):
     n = plan["frames"]
     info = R.meta[action.lower()]
     src, rects = info["src"], info["rects"]
+    show = plan["src"]                 # display frame -> render frame
     ls = plan["blur"][0]
     with tempfile.TemporaryDirectory() as tmp:
         od = render_overlay(plan, tmp)
@@ -531,20 +578,23 @@ def compose_outcome(R, plan, action, out):
         # so faint changes (a passing shadow) can't leave residue behind.
         settled = R.hold_full()
         sc = R.scale(settled)
-        shown = settled
-        for f in range(n):
-            if src[f] == f and str(f) in rects and rects[str(f)]:
-                crop = C.load(os.path.join(R.hand, action.lower(), f"{f:04d}.png"))
-                rest = f == n - 1 or src[f + 1] == f
-                if rest:
-                    settled = C.paste(settled, crop, rects[str(f)], sc)
+        shown, last, nr = settled, -1, len(src)
+        for d in range(n):
+            f = show[d]
+            if f != last:
+                last = f
+                if src[f] == f and str(f) in rects and rects[str(f)]:
+                    crop = C.load(os.path.join(R.hand, action.lower(), f"{f:04d}.png"))
+                    rest = f == nr - 1 or src[f + 1] == f
+                    if rest:
+                        settled = C.paste(settled, crop, rects[str(f)], sc)
+                        shown = settled
+                    else:
+                        shown = C.paste(settled, crop, rects[str(f)], sc)
+                elif src[f] != f:
                     shown = settled
-                else:
-                    shown = C.paste(settled, crop, rects[str(f)], sc)
-            elif src[f] != f:
-                shown = settled
-            bg = soften(zoomed(to_img(shown), plan["zoom"][f]), ease_in_out((f - ls) / 14) if f >= ls else 0)
-            ov = Image.open(os.path.join(od, f"{f:04d}.png"))
+            bg = soften(zoomed(to_img(shown), plan["zoom"][d]), ease_in_out((d - ls) / 14) if d >= ls else 0)
+            ov = Image.open(os.path.join(od, f"{d:04d}.png"))
             frame = bg.convert("RGBA")
             frame.alpha_composite(ov)
             enc.write(frame.convert("RGB"))
@@ -552,56 +602,70 @@ def compose_outcome(R, plan, action, out):
 
 
 def write_guide(videos):
-    """GUIDE.md next to the videos: what each file is, where the slots are, captions."""
+    """GUIDE.md next to the videos (in Portuguese for the owner; captions stay in English)."""
     sec = lambda f: f"{f / FPS:.1f}s"
     sc = SLOT_CORNER
-    ep_corner_end = H.EP_INTRO + H.EP_CRANE + 82 + 12
-    ep_end0 = H.EP_INTRO + H.EP_CRANE + H.EP_HOLD + 14
+    c0 = H.EP_INTRO + H.EP_CRANE
+    ep_corner_end = c0 + 82 + 12
+    ep_end0 = c0 + H.EP_HOLD + 14
     lines = [
         "# Interactive Blackjack: guia de postagem", "",
         "Cada mão tem 3 Reels (1080x1920, 30 fps, com efeitos sonoros de cartas e fichas; coloque a música "
-        "por cima no Edits) e uma capa "
-        "para cada um (`*_cover.jpg`, use como capa do Reel). Os textos dos vídeos e as legendas estão em "
-        "inglês, para o público internacional.", "",
+        "por cima no Edits) e uma capa para cada um (`*_cover.jpg`). Textos e legendas em inglês, para o "
+        "público internacional.", "",
         "## Primeiro post",
         "`00_series_trailer.mp4`: explica como a série funciona. Poste antes de tudo e fixe no perfil.", "",
-        "## Ordem por mão",
-        "1. No Edits, preencha os espaços usando os próprios arquivos de vídeo (não precisa estar postado):",
-        "   - no episódio (`handNN_1_episode.mp4`), coloque o vídeo HIT no espaço verde e o STAND no vermelho;",
-        "   - no canto PREVIOUSLY, coloque o(s) reel(s) anterior(es): no episódio, a mão anterior; nos vídeos "
-        "HIT/STAND, o episódio da mesma mão.",
-        "2. Poste primeiro `handNN_2_hit.mp4` e `handNN_3_stand.mp4`, e por último o episódio, para ele ficar "
-        "por cima no feed e no grid.",
-        "3. Se sua conta tiver a opção de vincular reels, vincule o episódio aos dois reels de decisão.", "",
-        "## Posição dos espaços (pixels no quadro 1080x1920)",
-        f"- PREVIOUSLY (canto): x {sc['x']}-{sc['x'] + sc['w']}, y {sc['y']}-{sc['y'] + sc['h']} "
-        f"({sc['w']}x{sc['h']}, 9:16). No episódio: de 0.2s a {sec(ep_corner_end)} (não existe na mão 1). "
-        "Nos vídeos HIT/STAND: de 0.2s até a tela da lição (tempo de cada mão abaixo).",
-        f"- HIT (tela final, esquerda): x 130-510, y 560-1236 (380x676, 9:16). De {sec(ep_end0)} até o fim (15.0s).",
-        f"- STAND (tela final, direita): x 570-950, y 560-1236 (380x676). De {sec(ep_end0 + 6)} até o fim.",
-        "- Enquete (opcional): durante \"HIT or STAND?\" (7.6s-11.0s), o meio da mesa (y ~760-1000) fica "
-        "livre para o sticker de enquete.", "",
-        "## Mãos", "",
+        "## O ovo e a galinha: em que ordem postar",
+        "Um link só pode apontar para um reel que já existe. Então cada mão é postada de trás para frente: "
+        "primeiro os finais, por último a pergunta.",
+        "1. **STAND** (`handNN_3_stand.mp4`)",
+        "2. **HIT** (`handNN_2_hit.mp4`)",
+        "3. **Episódio** (`handNN_1_episode.mp4`). Como HIT e STAND já existem, você vincula o episódio a eles.",
+        "",
+        "Assim, no perfil, cada mão vira uma fileira certinha do grid: **episódio | HIT | STAND**. Mesmo para "
+        "quem não clica em link, a escolha fica \"logo ao lado\". Para manter as fileiras alinhadas, poste "
+        "sempre os 3 de cada mão, sem outros posts no meio.",
+        "",
+        "Os links que voltam (do HIT/STAND para o episódio) só dá para pôr depois que o episódio existe: edite "
+        "os reels HIT e STAND e adicione o link para o episódio. Se o app não deixar editar o link, fixe um "
+        "comentário neles: `Full hand: the reel right before this one on my profile`.",
+        "",
+        "Os **espaços dentro dos vídeos** não são links, são só a vitrine: no Edits, você coloca neles os "
+        "próprios arquivos de vídeo (que você já tem), então não depende de nada estar postado.", "",
+        "## Espaços dentro dos vídeos (pixels no quadro 1080x1920)",
+        f"- **Episódio, canto PREVIOUSLY** (mão 2 em diante): x {sc['x']}-{sc['x'] + sc['w']}, "
+        f"y {sc['y']}-{sc['y'] + sc['h']} ({sc['w']}x{sc['h']}, 9:16), de 0.2s a {sec(ep_corner_end)}. "
+        "Coloque o episódio da mão anterior.",
+        f"- **Episódio, tela final**: HIT à esquerda (x 130-510, y 560-1236, 380x676) e STAND à direita "
+        f"(x 570-950, mesma altura), de {sec(ep_end0)} até o fim ({sec(H.EP_TOTAL)}). Coloque os vídeos HIT e STAND.",
+        "- **HIT/STAND, tela final \"WHAT'S NEXT?\"**: mesmas posições. Esquerda **THE HAND** (coloque o "
+        "episódio), direita **a outra escolha** (no vídeo HIT, coloque o STAND, e vice-versa). Os tempos "
+        "estão em cada mão abaixo.",
+        "- Enquete (opcional): durante \"HIT or STAND?\" no episódio, o meio da mesa (y ~760-1000) fica livre.",
+        "", "## Mãos", "",
     ]
     for no, hand in enumerate(H.HANDS, 1):
         names = [f"hand{no:02d}_{s}.mp4" for s in ("1_episode", "2_hit", "3_stand")]
         if not any(os.path.exists(os.path.join(videos, n)) for n in names):
             continue
         d = H.describe(hand)
-        hit, stand = H.outcome_timeline(hand, "HIT"), H.outcome_timeline(hand, "STAND")
-        res = lambda tl: {"win": "GANHA", "lose": "PERDE", "bust": "ESTOURA (BUST)", "push": "EMPATE (PUSH)"}[tl["branch"]["result"]]
+        res = lambda b: {"win": "GANHA", "lose": "PERDE", "bust": "ESTOURA (BUST)", "push": "EMPATE (PUSH)"}[b["result"]]
         cards = lambda cs: " ".join(cs)
         lines += [
             f"### Mão {no}: {d['player_short']} contra {d['up']} do dealer (estratégia básica: {d['best']})",
             f"- Cartas: você {cards(hand['player'])} | dealer {hand['up']} + escondida {hand['hole']}",
             f"- `{names[0]}` ({sec(H.EP_TOTAL)})",
-            f"- `{names[1]}` ({sec(hit['total'])}): HIT → você {H.total_label(hit['branch']['player'])}, "
-            f"dealer {H.total_label(hit['branch']['dealer'])}: **{res(hit)}**. Espaço PREVIOUSLY até {sec(hit['lesson_start'])}.",
-            f"- `{names[2]}` ({sec(stand['total'])}): STAND → você {H.total_label(stand['branch']['player'])}, "
-            f"dealer {H.total_label(stand['branch']['dealer'])}: **{res(stand)}**. Espaço PREVIOUSLY até {sec(stand['lesson_start'])}.",
+        ]
+        for name, action in ((names[1], "HIT"), (names[2], "STAND")):
+            tl = H.outcome_timeline(hand, action)
+            src, disp, es = outcome_display(tl)
+            b = tl["branch"]
+            lines.append(f"- `{name}` ({sec(len(src))}): {action} → você {H.total_label(b['player'])}, dealer "
+                         f"{H.total_label(b['dealer'])}: **{res(b)}**. Tela final de {sec(es + 14)} a {sec(len(src))}.")
+        lines += [
             "- Legendas (copie e cole):",
-            f"  - Episódio: `Hand #{no}: {d['player_short']} vs dealer {d['up']}. HIT or STAND? Pick your reel 👇 "
-            f"#blackjack #cardgames #casino #interactive`",
+            f"  - Episódio: `Hand #{no}: {d['player_short']} vs dealer {d['up']}. HIT or STAND? Comment your move, "
+            f"then watch your reel 👇 #blackjack #cardgames #casino #interactive`",
             f"  - HIT: `Hand #{no}: you chose HIT. Did it pay off? 🃏 #blackjack #cardgames #casino`",
             f"  - STAND: `Hand #{no}: you chose STAND. Did it pay off? 🃏 #blackjack #cardgames #casino`",
             "",
@@ -611,7 +675,7 @@ def write_guide(videos):
 
 def trailer_plan(no, hand, anchors):
     """'How it works' reel for the series (pin it first). Reuses the intro, crane and hold of a hand."""
-    n = H.EP_INTRO + H.EP_CRANE + H.EP_HOLD
+    n = H.EP_INTRO + H.EP_CRANE + TR_HOLD
     c0 = H.EP_INTRO + H.EP_CRANE
     zoom = [1.0] * n
     zh = ramp(n, c0, n - 1, 1.0, 1.06)
@@ -696,7 +760,7 @@ def main():
     if "trailer" in only:
         out = os.path.join(a.out, "00_series_trailer.mp4")
         compose_trailer(R, trailer_plan(no, hand, anchors), out)
-        mux_audio(out, trailer_sound(no, hand), (H.EP_INTRO + H.EP_CRANE + H.EP_HOLD) / FPS)
+        mux_audio(out, trailer_sound(no, hand), (H.EP_INTRO + H.EP_CRANE + TR_HOLD) / FPS)
         print("wrote", out, flush=True)
         return
     if "episode" in only:

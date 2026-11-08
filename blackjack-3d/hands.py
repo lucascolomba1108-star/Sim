@@ -152,7 +152,7 @@ def dealer_slot(i):
 
 # ------------------------------------------------------------------ timelines (frames @ 30 fps)
 DEAL, FLIP, CHIP = 14, 13, 24
-EP_INTRO, EP_CRANE, EP_HOLD, EP_END = 75, 60, 195, 120
+EP_INTRO, EP_CRANE, EP_HOLD, EP_END = 75, 60, 225, 210     # hold and end card are stills: free to lengthen
 EP_TOTAL = EP_INTRO + EP_CRANE + EP_HOLD + EP_END
 CRANE_DEALS = [4, 14, 24, 34]          # P1, D1(up), P2, D2(hole) within the crane shot
 OUT_CTX = 75                            # recap at the start of the HIT / STAND videos
