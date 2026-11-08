@@ -140,7 +140,7 @@ def episode_plan(no, hand, anchors):
         title([[body("What's your move?", 46, w=700)]], 482, c0 + 103, end0, rise=20),
         # end card: the two decision reels side by side
         title([[seg("YOUR MOVE", 112)]], 330, end0 + 6, n, rise=30),
-        title([[body("Pick a reel to see what happens", 42)]], 436, end0 + 12, n, rise=20),
+        title([[body("Comment HIT or STAND, then watch your reel", 38)]], 436, end0 + 12, n, rise=20),
         dict(type="slot", label="HIT", lsize=36, color=COL["hit"], x=130, y=560, w=380, h=676, t0=end0 + 14, t1=n, fin=14),
         dict(type="slot", label="STAND", lsize=36, color=COL["stand"], x=570, y=560, w=380, h=676, t0=end0 + 20, t1=n, fin=14),
         title([[body(f"Hand {no}  ·  {d['player_short']} vs dealer {d['up']}", 36, "rgba(255,255,255,0.8)")]],
@@ -249,7 +249,8 @@ def outcome_plan(no, hand, anchors, action):
         title([[body(f"on {d['player_short']} vs dealer {d['up']}", 46, w=700)]], 838, ls + 14, n, rise=16),
         dict(type="lesson", ok=ok, text=verdict, y=970, t0=ls + 22, t1=n, fin=12),
         title([[body("Basic strategy  ·  dealer stands on all 17s", 30, "rgba(255,255,255,0.62)", w=500)]], 1062, ls + 28, n, rise=10),
-        tag(f"FOLLOW FOR HAND {no + 1}", 1220, ls + 36, n, size=30),
+        title([[body("Did you call it right? Tell us in the comments.", 36, w=600)]], 1170, ls + 34, n, rise=12),
+        tag(f"FOLLOW FOR HAND {no + 1}", 1270, ls + 40, n, size=30),
     ]
     blur = (ls, n)
     return dict(frames=n, zoom=zoom, elements=E, blur=blur)
