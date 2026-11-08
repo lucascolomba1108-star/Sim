@@ -93,6 +93,21 @@ def corner_slot(t0, t1):
                 t0=t0, t1=t1, fin=14, fout=12, **SLOT_CORNER)
 
 
+def teaser(no, hand):
+    """Intro subtitle: the series promise on hand 1, a hint about the spot after that."""
+    if no == 1:
+        return "One hand. Two choices. Your call."
+    t, soft = H.total(hand["player"])
+    u = H.value(hand["up"])
+    if soft:
+        return "Soft hand: the Ace counts as 1 or 11."
+    if 12 <= t <= 16 and u >= 7:
+        return "Stiff hand. Strong dealer. Your call."
+    if 12 <= t <= 16:
+        return "The dealer shows a weak card. Your call."
+    return "One hand. Two choices. Your call."
+
+
 def episode_plan(no, hand, anchors):
     d = H.describe(hand)
     n = H.EP_TOTAL
@@ -111,7 +126,7 @@ def episode_plan(no, hand, anchors):
         dict(type="scrim", top=620, t0=c0, t1=end0, fin=16, fout=10),
         tag("INTERACTIVE BLACKJACK", 720, 3, 72),
         title([[seg("YOU MAKE", 116)], [seg("THE CALL.", 116, COL["gold"])]], 860, 9, 72, lh=120),
-        title([[body("One hand. Two choices. Your call.", 42)]], 1090, 18, 72, rise=24),
+        title([[body(teaser(no, hand), 42)]], 1090, 18, 72, rise=24),
         tag(f"HAND {no}", 1190, 24, 72, size=28, icon=False),
         tag(f"HAND {no}", 300, 82, c0 + 10, size=28, icon=False),
         dict(type="badge", who="DEALER", u=row_anchor(anchors["dealer_box"])[0], v=row_anchor(anchors["dealer_box"])[1],
