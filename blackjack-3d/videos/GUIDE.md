@@ -83,3 +83,13 @@ Postando nessa ordem, cada mão vira uma fileira no perfil: **episódio | HIT | 
   - Episódio: `Hand #6: 12 vs dealer 2. HIT or STAND? Comment your move, then watch your reel 👇 #blackjack #cardgames #casino #interactive`
   - HIT: `Hand #6: you chose HIT. Did it pay off? 🃏 #blackjack #cardgames #casino`
   - STAND: `Hand #6: you chose STAND. Did it pay off? 🃏 #blackjack #cardgames #casino`
+
+### Mão 7: soft 17 contra 8 do dealer (estratégia básica: HIT)
+- Cartas: você AC 6S | dealer 8S + escondida 9D
+- `hand07_1_episode.mp4` (19.0s)
+- `hand07_2_hit.mp4` (18.9s): HIT → você SOFT 20, dealer 17: **GANHA**.
+- `hand07_3_stand.mp4` (16.9s): STAND → você SOFT 17, dealer 17: **EMPATE (PUSH)**.
+- Legendas (copie e cole):
+  - Episódio: `Hand #7: soft 17 vs dealer 8. HIT or STAND? Comment your move, then watch your reel 👇 #blackjack #cardgames #casino #interactive`
+  - HIT: `Hand #7: you chose HIT. Did it pay off? 🃏 #blackjack #cardgames #casino`
+  - STAND: `Hand #7: you chose STAND. Did it pay off? 🃏 #blackjack #cardgames #casino`
