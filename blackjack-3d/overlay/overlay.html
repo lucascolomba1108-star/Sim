@@ -244,6 +244,33 @@ const DRAW = {
     });
     g.restore();
   },
+  pills(e, f, L) {    // solid labels in a row (not video slots): where the other reels are
+    const rise = (1 - easeOut(L.pin)) * 24;
+    g.save(); g.globalAlpha = L.a;
+    const fnt = font(800, e.size || 40, BODY), h = e.h || 92, gap = e.gap || 22, padx = 40;
+    const ws = e.items.map(it => measure(it.t, fnt, 2) + padx * 2);
+    const total = ws.reduce((a, b) => a + b, 0) + gap * (ws.length - 1);
+    let x = W / 2 - total / 2;
+    const y = e.y + rise;
+    e.items.forEach((it, i) => {
+      const p = clamp((f - e.t0 - i * 5) / 10);
+      if (p > 0) {
+        g.save(); g.globalAlpha *= easeOut(p);
+        g.shadowColor = 'rgba(0,0,0,0.5)'; g.shadowBlur = 24; g.shadowOffsetY = 8;
+        rr(x, y, ws[i], h, h / 2); g.fillStyle = it.color; g.fill();
+        g.shadowColor = 'transparent';
+        text(it.t, x + ws[i] / 2 + 1, y + h / 2 + 2, fnt, C.ink, { shadow: false, ls: 2 });
+        if (it.here) {
+          g.beginPath(); g.moveTo(x + ws[i] / 2, y + h + 12); g.lineTo(x + ws[i] / 2 - 14, y + h + 30);
+          g.lineTo(x + ws[i] / 2 + 14, y + h + 30); g.closePath(); g.fillStyle = it.color; g.fill();
+          text('YOU ARE HERE', x + ws[i] / 2, y + h + 58, font(800, 24, BODY), it.color, { ls: 3, blur: 10, sy: 2 });
+        }
+        g.restore();
+      }
+      x += ws[i] + gap;
+    });
+    g.restore();
+  },
   gridrow(e, f, L) {  // a profile-grid row: where the full hand and the other choice are
     const rise = (1 - easeOut(L.pin)) * 30;
     g.save(); g.globalAlpha = L.a;

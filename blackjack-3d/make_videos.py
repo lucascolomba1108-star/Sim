@@ -283,14 +283,14 @@ def outcome_plan(no, hand, anchors, action):
     # end screen: no reel boxes here (these reels are posted before the episode exists).
     # It shows where the full hand and the other choice are: the same row of the profile grid.
     es = end_start
-    tiles = [dict(top=f"HAND {no}", sub="the full hand", color=COL["gold"], big=50),
-             dict(top="HIT", sub="if you hit", color=COL["hit"], here=action == "HIT", big=60),
-             dict(top="STAND", sub="if you stood", color=COL["stand"], here=action == "STAND", big=60)]
+    items = [dict(t=f"HAND {no}", color=COL["gold"]),
+             dict(t="HIT", color=COL["hit"], here=action == "HIT"),
+             dict(t="STAND", color=COL["stand"], here=action == "STAND")]
     E += [
-        title([[seg("WATCH THE FULL HAND", 76)]], 360, es + 4, D, rise=30),
-        title([[body("Same row on my profile", 42, w=700)]], 466, es + 10, D, rise=20),
-        dict(type="gridrow", y=600, tiles=tiles, tw=290, th=386, gap=20, t0=es + 14, t1=D, fin=12),
-        tag(f"FOLLOW FOR HAND {no + 1}", 1150, es + 34, D, size=30),
+        title([[seg("WATCH THE FULL HAND", 76)]], 600, es + 4, D, rise=30),
+        title([[body("It's in the same row on my profile", 42, w=700)]], 706, es + 10, D, rise=20),
+        dict(type="pills", y=800, items=items, size=40, h=92, gap=22, t0=es + 14, t1=D, fin=12),
+        tag(f"FOLLOW FOR HAND {no + 1}", 1080, es + 34, D, size=30),
     ]
     return dict(frames=D, zoom=zoom, elements=E, blur=(disp(ls), D), src=src, end_start=es)
 
