@@ -86,14 +86,13 @@ def episode_script(no, hand):
 
 
 def trailer_script():
-    """The series trailer (00_series_trailer.mp4): intro, crane, then the three steps one by one."""
+    """The series trailer (00_series_trailer.mp4): intro, crane, then the three steps one by one.
+    The steps appear only 1 s apart (c0+16/46/76), so they are read as one line from the first."""
     c0 = H.EP_INTRO + H.EP_CRANE
     return [
         (4, "This is interactive blackjack. Every hand... you make the call."),
-        (c0 + 14, "Watch the deal."),                 # step 1 appears at c0+16
-        (c0 + 44, "Pick hit, or stand."),             # step 2 at c0+46
-        (c0 + 74, "Then watch what happens."),        # step 3 at c0+76
-        (c0 + 110, "Follow, so you never miss a hand."),
+        (c0 + 14, "Watch the deal. Pick hit or stand. See what happens."),
+        (c0 + 116, "Follow for every hand."),         # the "FOLLOW FOR EVERY HAND" tag at c0+116
     ]
 
 
@@ -230,7 +229,7 @@ def voiced_mix(sfx_mix, lines, seconds, voice):
     return out * (0.89 / max(1e-6, np.abs(out).max()))
 
 
-def write_video(src_video, out_video, audio):
+def _encode(src_video, out_video, audio):
     import wave
     with tempfile.TemporaryDirectory() as tmp:
         wav = os.path.join(tmp, "a.wav")
@@ -242,6 +241,20 @@ def write_video(src_video, out_video, audio):
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src_video, "-i", wav, "-map", "0:v:0", "-map", "1:a:0",
                         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out_video],
                        check=True)
+    log = subprocess.run(["ffmpeg", "-nostats", "-i", out_video, "-af", "volumedetect", "-vn", "-f", "null", "-"],
+                         capture_output=True, text=True).stderr
+    return 10 ** (float(log.split("max_volume:")[1].split("dB")[0]) / 20)
+
+
+def write_video(src_video, out_video, audio, target=0.89):
+    """AAC can overshoot sharp SFX transients (the trailer's shuffle: -1 dB in, +0.5 dB out),
+    so measure the decoded file and adjust the gain until it peaks at about -1 dBFS."""
+    gain = 1.0
+    for _ in range(4):
+        peak = _encode(src_video, out_video, audio * gain)
+        if 0.86 <= peak <= 0.9:                              # -1.3 .. -0.9 dBFS
+            break
+        gain *= target / peak
 
 
 def main():
