@@ -54,3 +54,13 @@ Os **espaços dentro dos vídeos** não são links, são só a vitrine: no Edits
   - Episódio: `Hand #3: 12 vs dealer 4. HIT or STAND? Comment your move, then watch your reel 👇 #blackjack #cardgames #casino #interactive`
   - HIT: `Hand #3: you chose HIT. Did it pay off? 🃏 #blackjack #cardgames #casino`
   - STAND: `Hand #3: you chose STAND. Did it pay off? 🃏 #blackjack #cardgames #casino`
+
+### Mão 4: 15 contra 7 do dealer (estratégia básica: HIT)
+- Cartas: você 8H 7C | dealer 7D + escondida JS
+- `hand04_1_episode.mp4` (19.0s)
+- `hand04_2_hit.mp4` (19.9s): HIT → você 19, dealer 17: **GANHA**. Tela final de 14.3s a 19.9s.
+- `hand04_3_stand.mp4` (18.7s): STAND → você 15, dealer 17: **PERDE**. Tela final de 13.1s a 18.7s.
+- Legendas (copie e cole):
+  - Episódio: `Hand #4: 15 vs dealer 7. HIT or STAND? Comment your move, then watch your reel 👇 #blackjack #cardgames #casino #interactive`
+  - HIT: `Hand #4: you chose HIT. Did it pay off? 🃏 #blackjack #cardgames #casino`
+  - STAND: `Hand #4: you chose STAND. Did it pay off? 🃏 #blackjack #cardgames #casino`
