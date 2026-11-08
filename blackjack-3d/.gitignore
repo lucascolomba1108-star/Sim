@@ -1,3 +1,4 @@
 render/
 .blender/
 __pycache__/
+voice_cache/

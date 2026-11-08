@@ -28,3 +28,11 @@ Pipeline: `hands.py` (hands + rules + timeline) -> `blackjack3d.py` (Cycles
 renders: shared plates once, then per-hand crops) -> `make_videos.py` (composite,
 overlay graphics from `overlay/`, ffmpeg). `series.py` runs hands back to back.
 `render_vast.sh` is the GPU-box entry point.
+
+## Voice-over (ElevenLabs)
+`blackjack-3d/voice.py` writes timed English voice scripts (`videos_voice/handNN_VOICE.md`), generates
+each line with ElevenLabs, ducks the sound effects under the voice and saves voiced copies in
+`blackjack-3d/videos_voice/` (originals stay in `videos/` for A/B testing). Needs `ELEVENLABS_API_KEY`
+(environment secret) and `api.elevenlabs.io` in the environment's allowed domains. Optional
+`ELEVENLABS_VOICE_ID` (default "Adam"). Run: `python3 blackjack-3d/voice.py 1 2 3 4 5 6`.
+Listening is impossible here: check the printed timing notes and the waveform alignment.

@@ -53,7 +53,7 @@ def article(word):
 
 def card_bare(code):
     r = H.rank(code)
-    return RANK.get(r, num(int(r))).capitalize()
+    return (RANK[r] if r in RANK else num(int(r))).capitalize()
 
 
 def spoken_total(cards):
