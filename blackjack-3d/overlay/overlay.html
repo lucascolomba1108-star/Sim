@@ -1,0 +1,247 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Overlay</title>
+<style>html,body{margin:0;background:transparent}canvas{display:block}</style></head>
+<body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// Motion-graphics layer for the blackjack series. Renders transparent frames from a
+// plan (built by make_videos.py): window.render(i) draws frame i.
+const W = 1080, H = 1920;
+const cv = document.getElementById('c');
+const g = cv.getContext('2d');
+const C = {
+  gold: '#F5D27A', goldDeep: '#E2B24A', white: '#FFFFFF', ink: '#0B0C0E',
+  hit: '#3EDC8A', stand: '#FF5A5F', push: '#9DB4FF', glass: 'rgba(10,11,13,0.66)',
+  line: 'rgba(255,255,255,0.18)'
+};
+const DISPLAY = "'Inter Display', 'Inter', sans-serif";
+const BODY = "'Inter', sans-serif";
+let PLAN = null;
+
+// ---------------------------------------------------------------- easing
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeOut = p => 1 - Math.pow(1 - clamp(p), 3);
+const easeIn = p => Math.pow(clamp(p), 3);
+const easeInOut = p => { p = clamp(p); return p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; };
+const back = p => { p = clamp(p); const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+
+// visibility of an element at frame f: {a: alpha 0..1, pin: 0..1 entrance progress, pout}
+function life(e, f) {
+  const fin = e.fin ?? 12, fout = e.fout ?? 10;
+  if (f < e.t0 || f >= e.t1 + fout) return null;
+  const pin = fin > 0 ? clamp((f - e.t0) / fin) : 1;
+  const pout = f >= e.t1 ? clamp((f - e.t1) / Math.max(1, fout)) : 0;
+  return { a: easeOut(pin) * (1 - easeIn(pout)), pin, pout };
+}
+
+// ---------------------------------------------------------------- primitives
+function rr(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+}
+function font(weight, size, fam = DISPLAY) { return `${weight} ${size}px ${fam}`; }
+function measure(txt, f, ls = 0) { g.font = f; g.letterSpacing = ls + 'px'; return g.measureText(txt).width; }
+function text(txt, x, y, f, color, opt = {}) {
+  g.save();
+  g.font = f; g.letterSpacing = (opt.ls || 0) + 'px';
+  g.textAlign = opt.align || 'center'; g.textBaseline = 'middle';
+  if (opt.shadow !== false) { g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = opt.blur ?? 22; g.shadowOffsetY = opt.sy ?? 6; }
+  if (opt.glow) { g.shadowColor = opt.glow; g.shadowBlur = opt.glowBlur || 40; g.shadowOffsetY = 0; }
+  g.fillStyle = color; g.fillText(txt, x, y);
+  g.restore();
+}
+// several coloured segments on one line, centred on x
+function segments(segs, x, y, opt = {}) {
+  const ws = segs.map(s => measure(s.t, s.f, s.ls || 0));
+  const gap = opt.gap ?? 0;
+  const total = ws.reduce((a, b) => a + b, 0) + gap * (segs.length - 1);
+  let cx = x - total / 2;
+  segs.forEach((s, i) => { text(s.t, cx + ws[i] / 2, y + (s.dy || 0), s.f, s.c, { ls: s.ls || 0, glow: s.glow }); cx += ws[i] + gap; });
+}
+function glassPanel(x, y, w, h, r = 28, alpha = 1, border = C.line) {
+  g.save(); g.globalAlpha *= alpha;
+  g.shadowColor = 'rgba(0,0,0,0.45)'; g.shadowBlur = 40; g.shadowOffsetY = 12;
+  rr(x, y, w, h, r); g.fillStyle = C.glass; g.fill();
+  g.shadowColor = 'transparent';
+  g.lineWidth = 2; g.strokeStyle = border; g.stroke();
+  g.restore();
+}
+function spade(x, y, s, color) {
+  g.save(); g.translate(x, y); g.scale(s / 100, s / 100); g.fillStyle = color;
+  g.beginPath();
+  g.moveTo(0, -50); g.bezierCurveTo(10, -30, 50, -10, 45, 18); g.bezierCurveTo(42, 38, 18, 42, 6, 26);
+  g.lineTo(14, 50); g.lineTo(-14, 50); g.lineTo(-6, 26);
+  g.bezierCurveTo(-18, 42, -42, 38, -45, 18); g.bezierCurveTo(-50, -10, -10, -30, 0, -50); g.fill();
+  g.restore();
+}
+function playIcon(x, y, s, alpha) {
+  g.save(); g.globalAlpha *= alpha;
+  g.beginPath(); g.arc(x, y, s, 0, Math.PI * 2); g.fillStyle = 'rgba(255,255,255,0.10)'; g.fill();
+  g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,0.35)'; g.stroke();
+  g.beginPath(); g.moveTo(x - s * 0.28, y - s * 0.4); g.lineTo(x + s * 0.45, y); g.lineTo(x - s * 0.28, y + s * 0.4); g.closePath();
+  g.fillStyle = 'rgba(255,255,255,0.55)'; g.fill();
+  g.restore();
+}
+function check(x, y, s, color) {
+  g.save(); g.lineWidth = s * 0.16; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = color;
+  g.beginPath(); g.moveTo(x - s * 0.35, y); g.lineTo(x - s * 0.08, y + s * 0.28); g.lineTo(x + s * 0.4, y - s * 0.3); g.stroke(); g.restore();
+}
+function cross(x, y, s, color) {
+  g.save(); g.lineWidth = s * 0.16; g.lineCap = 'round'; g.strokeStyle = color;
+  g.beginPath(); g.moveTo(x - s * 0.3, y - s * 0.3); g.lineTo(x + s * 0.3, y + s * 0.3);
+  g.moveTo(x + s * 0.3, y - s * 0.3); g.lineTo(x - s * 0.3, y + s * 0.3); g.stroke(); g.restore();
+}
+
+// map normalised plate coordinates through this frame's 2D push-in
+function toScreen(u, v, f) {
+  const z = PLAN.zoom[f] ?? 1;
+  return [W / 2 + (u - 0.5) * W * z, H / 2 + (v - 0.5) * H * z];
+}
+
+// ---------------------------------------------------------------- elements
+const DRAW = {
+  scrim(e, f, L) {
+    g.save(); g.globalAlpha = L.a * (e.alpha ?? 1);
+    if (e.top) { const gr = g.createLinearGradient(0, 0, 0, e.top); gr.addColorStop(0, 'rgba(0,0,0,0.62)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, e.top); }
+    if (e.bottom) { const gr = g.createLinearGradient(0, H - e.bottom, 0, H); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.6)'); g.fillStyle = gr; g.fillRect(0, H - e.bottom, W, e.bottom); }
+    if (e.full) { g.fillStyle = `rgba(0,0,0,${e.full})`; g.fillRect(0, 0, W, H); }
+    g.restore();
+  },
+  tag(e, f, L) {   // gold-outlined pill with a spade
+    const rise = (1 - easeOut(L.pin)) * 18;
+    g.save(); g.globalAlpha = L.a;
+    const fnt = font(700, e.size || 30, BODY), ls = (e.size || 30) * 0.2;
+    const tw = measure(e.text, fnt, ls), h = (e.size || 30) * 2.05, pad = h * 0.62, icon = e.icon === false ? 0 : h * 0.62;
+    const w = tw + pad * 2 + icon, x = e.x - w / 2, y = e.y - h / 2 + rise;
+    rr(x, y, w, h, h / 2); g.fillStyle = 'rgba(8,9,10,0.62)'; g.fill();
+    g.lineWidth = 2.5; g.strokeStyle = 'rgba(245,210,122,0.85)'; g.stroke();
+    if (icon) spade(x + pad + icon * 0.32, y + h / 2 + 1, h * 0.42, C.gold);
+    text(e.text, x + pad + icon + tw / 2 + ls / 2, y + h / 2 + 2, fnt, C.gold, { ls, shadow: false });
+    g.restore();
+  },
+  title(e, f, L) {  // one or more lines; each line = list of segments
+    const rise = (1 - easeOut(L.pin)) * (e.rise ?? 40);
+    const sc = e.pop ? lerp(0.6, 1, back(L.pin)) * (1 + (e.pulse ? 0.025 * Math.sin((f - e.t0) / 5) : 0)) : 1;
+    g.save(); g.globalAlpha = L.a;
+    g.translate(e.x ?? W / 2, e.y + rise); g.scale(sc, sc);
+    e.lines.forEach((line, i) => {
+      const segs = line.map(s => ({ t: s.t, f: font(s.w || 900, s.size, s.fam === 'body' ? BODY : DISPLAY), c: s.c || C.white, ls: s.ls ?? -s.size * 0.02, dy: s.dy || 0, glow: s.glow }));
+      segments(segs, 0, i * (e.lh || 110), { gap: e.gap ?? 22 });
+    });
+    g.restore();
+  },
+  caption(e, f, L) {   // glass panel with 1-2 lines, top of screen
+    const rise = (1 - easeOut(L.pin)) * 24;
+    g.save(); g.globalAlpha = L.a;
+    const fnts = e.lines.map(l => font(l.w || 700, l.size || 44, BODY));
+    const widths = e.lines.map((l, i) => measure(l.t, fnts[i]));
+    const cx = e.x ?? W / 2, maxw = e.maxw ?? 960;
+    let w = Math.max(...widths) + 96, sc = 1;
+    if (w > maxw) { sc = maxw / w; w = maxw; }
+    const lh = (e.lh || 62) * sc, h = lh * e.lines.length + 52 * sc;
+    const x = cx - w / 2, y = e.y - h / 2 + rise;
+    glassPanel(x, y, w, h, 30);
+    e.lines.forEach((l, i) => text(l.t, cx, y + 26 * sc + lh / 2 + i * lh + 2, font(l.w || 700, (l.size || 44) * sc, BODY), l.c || C.white, { shadow: false }));
+    g.restore();
+  },
+  badge(e, f, L) {     // card total pinned to a row of cards; value changes with a pop
+    let cur = e.states[0], since = e.t0;
+    for (const s of e.states) if (f >= s.f) { cur = s; since = s.f; }
+    const pop = since > e.t0 ? back(clamp((f - since) / 10)) : back(L.pin);
+    const shake = cur.shake && f - since < 14 ? Math.sin((f - since) * 2.2) * 10 * (1 - (f - since) / 14) : 0;
+    // anchor: left of the row, vertically centred on it
+    const [ax, ay] = toScreen(e.u, e.v, f);
+    const fnt = font(800, 56), tw = measure(cur.label, fnt, -1);
+    const w = Math.max(116, tw + 52), h = 86;
+    const x = ax - w + shake, y = ay - h / 2;
+    const sc = lerp(0.55, 1, pop);
+    g.save(); g.globalAlpha = L.a;
+    g.translate(x + w / 2, y + h / 2); g.scale(sc, sc); g.translate(-(x + w / 2), -(y + h / 2));
+    text(e.who, x + w / 2, y + h + 24, font(700, 24, BODY), C.gold, { ls: 4, blur: 10, sy: 2 });
+    g.shadowColor = cur.glow || 'rgba(0,0,0,0.5)'; g.shadowBlur = cur.glow ? 40 : 24; g.shadowOffsetY = cur.glow ? 0 : 8;
+    rr(x, y, w, h, h / 2); g.fillStyle = cur.bg || 'rgba(10,11,13,0.78)'; g.fill();
+    g.shadowColor = 'transparent';
+    g.lineWidth = 2.5; g.strokeStyle = cur.border || 'rgba(255,255,255,0.28)'; g.stroke();
+    text(cur.label, x + w / 2, y + h / 2 + 3, fnt, cur.fg || C.white, { shadow: false, ls: -1 });
+    g.restore();
+  },
+  banner(e, f, L) {    // big outcome banner between the two rows
+    const p = back(clamp((f - e.t0) / 12));
+    const sc = lerp(0.4, 1, p) * (1 + 0.02 * Math.sin((f - e.t0) / 6));
+    g.save(); g.globalAlpha = L.a;
+    g.translate(W / 2, e.y); g.scale(sc, sc);
+    const big = font(900, e.size || 150), tw = measure(e.text, big, -4);
+    const w = Math.max(tw + 140, 640), h = e.sub ? 270 : 210;
+    g.shadowColor = e.color; g.shadowBlur = 70; rr(-w / 2, -h / 2, w, h, 44);
+    g.fillStyle = 'rgba(8,9,10,0.80)'; g.fill(); g.shadowColor = 'transparent';
+    g.lineWidth = 4; g.strokeStyle = e.color; g.stroke();
+    text(e.text, 0, e.sub ? -28 : 6, big, e.color, { ls: -4, glow: e.color, glowBlur: 34 });
+    if (e.sub) text(e.sub, 0, 82, font(700, 42, BODY), C.white, { shadow: false });
+    g.restore();
+  },
+  flash(e, f, L) {
+    const p = clamp((f - e.t0) / (e.t1 - e.t0));
+    g.save(); g.globalAlpha = (e.alpha ?? 0.28) * (1 - easeOut(p));
+    const gr = g.createRadialGradient(W / 2, e.y || H / 2, 50, W / 2, e.y || H / 2, 1100);
+    gr.addColorStop(0, e.color); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, W, H); g.restore();
+  },
+  particles(e, f, L) {  // deterministic gold burst
+    const t = f - e.t0; if (t < 0) return;
+    let s = e.seed || 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    g.save();
+    for (let i = 0; i < (e.n || 70); i++) {
+      const ang = rnd() * Math.PI * 2, sp = 10 + rnd() * 26, life = 34 + rnd() * 26, size = 5 + rnd() * 9, spin = rnd() * 6;
+      if (t > life) continue;
+      const k = t / life;
+      const x = W / 2 + Math.cos(ang) * sp * t * (1 - k * 0.45);
+      const y = e.y + Math.sin(ang) * sp * t * (1 - k * 0.45) + 0.55 * t * t * 0.5;
+      g.globalAlpha = (1 - k) * L.a;
+      g.save(); g.translate(x, y); g.rotate(spin + t * 0.2);
+      g.fillStyle = i % 3 === 0 ? '#FFF3C4' : (i % 3 === 1 ? C.gold : C.goldDeep);
+      g.fillRect(-size / 2, -size * 0.3, size, size * 0.6); g.restore();
+    }
+    g.restore();
+  },
+  slot(e, f, L) {      // placeholder frame where a reel will be placed in Edits
+    const rise = (1 - easeOut(L.pin)) * 30;
+    g.save(); g.globalAlpha = L.a;
+    const x = e.x, y = e.y + rise, w = e.w, h = e.h, col = e.color || C.gold;
+    g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = 36; g.shadowOffsetY = 12;
+    rr(x, y, w, h, e.r || 26); g.fillStyle = 'rgba(6,7,8,0.55)'; g.fill(); g.shadowColor = 'transparent';
+    g.lineWidth = e.lw || 4; g.strokeStyle = col; g.stroke();
+    playIcon(x + w / 2, y + h / 2, Math.min(w, h) * 0.14, 1);
+    if (e.label) {   // pill on the top edge
+      const fnt = font(800, e.lsize || 30, BODY), ls = (e.lsize || 30) * 0.12;
+      const tw = measure(e.label, fnt, ls), ph = (e.lsize || 30) * 1.9, pw = tw + ph * 1.1;
+      const px = x + w / 2 - pw / 2, py = y - ph / 2;
+      rr(px, py, pw, ph, ph / 2); g.fillStyle = col; g.fill();
+      text(e.label, x + w / 2 + ls / 2, py + ph / 2 + 2, fnt, e.labelFg || C.ink, { ls, shadow: false });
+    }
+    g.restore();
+  },
+  lesson(e, f, L) {   // ✓ / ✗ verdict line
+    const rise = (1 - easeOut(L.pin)) * 24;
+    g.save(); g.globalAlpha = L.a;
+    const fnt = font(700, 44, BODY), tw = measure(e.text, fnt);
+    const icon = 64, total = icon + 20 + tw, x = W / 2 - total / 2, y = e.y + rise;
+    g.beginPath(); g.arc(x + icon / 2, y, icon / 2, 0, Math.PI * 2); g.fillStyle = e.ok ? C.hit : C.stand; g.fill();
+    (e.ok ? check : cross)(x + icon / 2, y + 1, icon * 0.9, C.ink);
+    text(e.text, x + icon + 20 + tw / 2, y + 2, fnt, C.white, {});
+    g.restore();
+  },
+};
+
+window.setPlan = p => { PLAN = p; };
+window.render = f => {
+  g.clearRect(0, 0, W, H);
+  for (const e of PLAN.elements) {
+    const L = life(e, f);
+    if (!L || L.a <= 0.001) continue;
+    DRAW[e.type](e, f, L);
+  }
+  return true;
+};
+window.frameData = f => { window.render(f); return cv.toDataURL('image/png').split(',')[1]; };
+</script></body></html>
