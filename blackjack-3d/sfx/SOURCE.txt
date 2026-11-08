@@ -1,0 +1,2 @@
+Kenney Casino Audio (kenney.nl), license CC0 1.0 (public domain).
+Copied from github.com/pigdevstudio/assets (sandbox/audio/cassino_sfx), repo under the Unlicense.

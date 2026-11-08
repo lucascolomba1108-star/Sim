@@ -256,6 +256,145 @@ def outcome_plan(no, hand, anchors, action):
     return dict(frames=n, zoom=zoom, elements=E, blur=blur)
 
 
+# ----------------------------------------------------------------------------- sound
+# Kenney Casino Audio (CC0), see sfx/SOURCE.txt. Each cue is placed so the sound's
+# own attack lands on the frame where the action happens.
+SFX_DIR = os.path.join(HERE, "sfx")
+SR = 48000
+_sfx_cache = {}
+
+
+def sfx(name):
+    if name not in _sfx_cache:
+        raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", os.path.join(SFX_DIR, name + ".ogg"),
+                              "-f", "f32le", "-ac", "2", "-ar", str(SR), "-"], capture_output=True, check=True).stdout
+        a = np.frombuffer(raw, np.float32).reshape(-1, 2).copy()
+        a /= max(1e-6, np.abs(a).max())
+        env = np.abs(a).max(axis=1)
+        onset = int(np.argmax(env > 0.15))
+        _sfx_cache[name] = (a, onset)
+    return _sfx_cache[name]
+
+
+class Mix:
+    def __init__(self, seconds):
+        self.buf = np.zeros((int(seconds * SR) + SR, 2), np.float32)
+
+    def add(self, name, frame, gain_db=0.0, pan=0.0):
+        a, onset = sfx(name)
+        start = int(frame / FPS * SR) - onset
+        a = a * (10 ** (gain_db / 20))
+        if pan:
+            a = a * np.array([1 - max(0, pan), 1 + min(0, pan)], np.float32)
+        s0 = max(0, start)
+        seg = a[s0 - start:]
+        seg = seg[:max(0, len(self.buf) - s0)]
+        self.buf[s0:s0 + len(seg)] += seg
+
+    def write(self, path, seconds):
+        out = self.buf[:int(seconds * SR)]
+        peak = np.abs(out).max()
+        if peak > 0:
+            out = out * (0.89 / peak)        # -1 dBFS peak: clearly audible under music
+        pcm = (np.clip(out, -1, 1) * 32767).astype("<i2")
+        import wave
+        with wave.open(path, "wb") as w:
+            w.setnchannels(2)
+            w.setsampwidth(2)
+            w.setframerate(SR)
+            w.writeframes(pcm.tobytes())
+
+
+def pick(prefix, count, key):
+    return f"{prefix}{key % count + 1}"
+
+
+def deal_cue(m, frame, key, landing=True, gain=-3.0):
+    m.add(pick("cardSlide", 8, key), frame + 1, gain, pan=0.25)
+    if landing:
+        m.add(pick("cardPlace", 4, key), frame + H.DEAL - 2, gain - 8)
+
+
+def episode_sound(no, hand):
+    m = Mix(H.EP_TOTAL / FPS)
+    c0 = H.EP_INTRO + H.EP_CRANE
+    end0 = c0 + H.EP_HOLD
+    m.add("cardShuffle", 2, -9.0)
+    for i, f in enumerate(H.CRANE_DEALS):
+        deal_cue(m, H.EP_INTRO + f, no * 3 + i)
+    m.add("chipLay1", c0 + 6, -15.0)
+    m.add("chipLay3", c0 + 12, -15.0)
+    m.add("chipsStack3", c0 + 93, -6.0)
+    m.add("cardFan1", end0 - 2, -8.0)
+    m.add("chipLay2", end0 + 14, -13.0, pan=-0.3)
+    m.add("chipLay1", end0 + 20, -13.0, pan=0.3)
+    return m
+
+
+def outcome_sound(no, hand, action):
+    tl = H.outcome_timeline(hand, action)
+    m = Mix(tl["total"] / FPS)
+    m.add("chipsStack2", 10, -8.0)
+    for k, ev in enumerate(tl["events"]):
+        kind, key = ev["kind"], no * 7 + k
+        if kind in ("player_draw", "dealer_draw"):
+            deal_cue(m, ev["start"], key)
+        elif kind == "dealer_reveal":
+            m.add(pick("cardShove", 4, key), ev["start"] + 2, -6.0)
+            m.add(pick("cardPlace", 4, key + 1), ev["land"] - 1, -12.0)
+        elif kind == "settle":
+            res = ev["result"]
+            if res == "win":
+                m.add("chipsHandle5", ev["start"], -5.0)
+                m.add("chipsHandle6", ev["chips_start"] + 2, -9.0)
+                m.add("chipsStack4", ev["chips_end"] - 1, -4.0)
+            elif res in ("lose", "bust"):
+                m.add(pick("cardShove", 4, key), ev["start"], -9.0)
+                m.add("chipsHandle4", ev["chips_start"] + 2, -7.0)
+                m.add("chipsCollide2", ev["chips_end"] - 2, -12.0)
+            else:
+                m.add("chipLay3", ev["start"], -8.0)
+    m.add("cardFan2", tl["lesson_start"] - 6, -9.0)
+    m.add("chipLay2", tl["lesson_start"] + 22, -14.0)
+    return m, tl["total"]
+
+
+def trailer_sound(no, hand):
+    m = Mix((H.EP_INTRO + H.EP_CRANE + H.EP_HOLD) / FPS)
+    c0 = H.EP_INTRO + H.EP_CRANE
+    m.add("cardShuffle", 2, -9.0)
+    for i, f in enumerate(H.CRANE_DEALS):
+        deal_cue(m, H.EP_INTRO + f, no * 3 + i)
+    for i in range(3):
+        m.add(pick("chipLay", 3, i), c0 + 16 + i * 30, -12.0)
+    m.add("chipsStack3", c0 + 116, -8.0)
+    return m
+
+
+def mux_audio(video, mix, seconds):
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = os.path.join(tmp, "a.wav")
+        mix.write(wav, seconds)
+        out = os.path.join(tmp, "v.mp4")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", video, "-i", wav, "-map", "0:v:0", "-map", "1:a:0",
+                        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", str(SR), "-shortest",
+                        "-movflags", "+faststart", out], check=True)
+        shutil.move(out, video)
+
+
+def add_sound(no, hand, videos, which=("episode", "hit", "stand")):
+    if "episode" in which:
+        p = os.path.join(videos, f"hand{no:02d}_1_episode.mp4")
+        if os.path.exists(p):
+            mux_audio(p, episode_sound(no, hand), H.EP_TOTAL / FPS)
+    for i, action in ((2, "HIT"), (3, "STAND")):
+        if action.lower() in which:
+            p = os.path.join(videos, f"hand{no:02d}_{i}_{action.lower()}.mp4")
+            if os.path.exists(p):
+                m, n = outcome_sound(no, hand, action)
+                mux_audio(p, m, n / FPS)
+
+
 # ----------------------------------------------------------------------------- frames
 class Renders:
     def __init__(self, root, no):
@@ -420,7 +559,8 @@ def write_guide(videos):
     ep_end0 = H.EP_INTRO + H.EP_CRANE + H.EP_HOLD + 14
     lines = [
         "# Interactive Blackjack: guia de postagem", "",
-        "Cada mão tem 3 Reels (1080x1920, 30 fps, sem áudio: coloque a música no Edits) e uma capa "
+        "Cada mão tem 3 Reels (1080x1920, 30 fps, com efeitos sonoros de cartas e fichas; coloque a música "
+        "por cima no Edits) e uma capa "
         "para cada um (`*_cover.jpg`, use como capa do Reel). Os textos dos vídeos e as legendas estão em "
         "inglês, para o público internacional.", "",
         "## Primeiro post",
@@ -549,9 +689,14 @@ def main():
     anchors = R.meta["anchors"]
     os.makedirs(a.out, exist_ok=True)
     only = a.only.split(",")
+    if "sound" in only:                     # add/refresh the audio of existing videos only
+        add_sound(no, hand, a.out)
+        print(f"sound added to hand {no}", flush=True)
+        return
     if "trailer" in only:
         out = os.path.join(a.out, "00_series_trailer.mp4")
         compose_trailer(R, trailer_plan(no, hand, anchors), out)
+        mux_audio(out, trailer_sound(no, hand), (H.EP_INTRO + H.EP_CRANE + H.EP_HOLD) / FPS)
         print("wrote", out, flush=True)
         return
     if "episode" in only:
@@ -563,6 +708,7 @@ def main():
             out = os.path.join(a.out, f"hand{no:02d}_{i}_{action.lower()}.mp4")
             compose_outcome(R, outcome_plan(no, hand, anchors, action), action, out)
             print("wrote", out, flush=True)
+    add_sound(no, hand, a.out, which=only)
     make_covers(R, no, hand, anchors, a.out)
     write_guide(a.out)
 
