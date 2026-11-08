@@ -392,24 +392,29 @@ def write_guide(videos):
     ep_corner_end = H.EP_INTRO + H.EP_CRANE + 82 + 12
     ep_end0 = H.EP_INTRO + H.EP_CRANE + H.EP_HOLD + 14
     lines = [
-        "# Interactive Blackjack: videos", "",
-        "Every hand has three Reels (1080x1920, 30 fps, no audio: add music in Edits) and a "
-        "cover image for each (`*_cover.jpg`, upload it as the Reel cover).", "",
-        "## Posting order (per hand)",
-        "1. Post `handNN_2_hit.mp4` and `handNN_3_stand.mp4` (the two decision reels).",
-        "2. In Edits, open `handNN_1_episode.mp4` and drop those two reels into the end-card slots "
-        "(HIT on the left, STAND on the right). From hand 2 on, put the previous reels in the "
-        "PREVIOUSLY corner slot.",
-        "3. Post the episode. If your account can link reels, link it to both decision reels.", "",
-        "## Slot positions (pixels on the 1080x1920 frame)",
-        f"- PREVIOUSLY (corner): x {sc['x']}-{sc['x'] + sc['w']}, y {sc['y']}-{sc['y'] + sc['h']} "
-        f"({sc['w']}x{sc['h']}, 9:16). Episode: 0.2s-{sec(ep_corner_end)}. "
-        "HIT/STAND reels: from 0.2s until the lesson card (time listed per hand below).",
-        f"- HIT (end card, left): x 130-510, y 560-1236 (380x676, 9:16). From {sec(ep_end0)} to the end (15.0s).",
-        f"- STAND (end card, right): x 570-950, y 560-1236 (380x676). From {sec(ep_end0 + 6)} to the end.",
-        "- Poll sticker (optional): during \"HIT or STAND?\" (7.6s-11.0s) the middle of the table, "
-        "y ~760-1000, is left free for it.", "",
-        "## Hands", "",
+        "# Interactive Blackjack: guia de postagem", "",
+        "Cada mão tem 3 Reels (1080x1920, 30 fps, sem áudio: coloque a música no Edits) e uma capa "
+        "para cada um (`*_cover.jpg`, use como capa do Reel). Os textos dos vídeos e as legendas estão em "
+        "inglês, para o público internacional.", "",
+        "## Primeiro post",
+        "`00_series_trailer.mp4`: explica como a série funciona. Poste antes de tudo e fixe no perfil.", "",
+        "## Ordem por mão",
+        "1. No Edits, preencha os espaços usando os próprios arquivos de vídeo (não precisa estar postado):",
+        "   - no episódio (`handNN_1_episode.mp4`), coloque o vídeo HIT no espaço verde e o STAND no vermelho;",
+        "   - no canto PREVIOUSLY, coloque o(s) reel(s) anterior(es): no episódio, a mão anterior; nos vídeos "
+        "HIT/STAND, o episódio da mesma mão.",
+        "2. Poste primeiro `handNN_2_hit.mp4` e `handNN_3_stand.mp4`, e por último o episódio, para ele ficar "
+        "por cima no feed e no grid.",
+        "3. Se sua conta tiver a opção de vincular reels, vincule o episódio aos dois reels de decisão.", "",
+        "## Posição dos espaços (pixels no quadro 1080x1920)",
+        f"- PREVIOUSLY (canto): x {sc['x']}-{sc['x'] + sc['w']}, y {sc['y']}-{sc['y'] + sc['h']} "
+        f"({sc['w']}x{sc['h']}, 9:16). No episódio: de 0.2s a {sec(ep_corner_end)} (não existe na mão 1). "
+        "Nos vídeos HIT/STAND: de 0.2s até a tela da lição (tempo de cada mão abaixo).",
+        f"- HIT (tela final, esquerda): x 130-510, y 560-1236 (380x676, 9:16). De {sec(ep_end0)} até o fim (15.0s).",
+        f"- STAND (tela final, direita): x 570-950, y 560-1236 (380x676). De {sec(ep_end0 + 6)} até o fim.",
+        "- Enquete (opcional): durante \"HIT or STAND?\" (7.6s-11.0s), o meio da mesa (y ~760-1000) fica "
+        "livre para o sticker de enquete.", "",
+        "## Mãos", "",
     ]
     for no, hand in enumerate(H.HANDS, 1):
         names = [f"hand{no:02d}_{s}.mp4" for s in ("1_episode", "2_hit", "3_stand")]
@@ -417,18 +422,18 @@ def write_guide(videos):
             continue
         d = H.describe(hand)
         hit, stand = H.outcome_timeline(hand, "HIT"), H.outcome_timeline(hand, "STAND")
-        res = lambda tl: {"win": "WIN", "lose": "LOSE", "bust": "BUST", "push": "PUSH"}[tl["branch"]["result"]]
+        res = lambda tl: {"win": "GANHA", "lose": "PERDE", "bust": "ESTOURA (BUST)", "push": "EMPATE (PUSH)"}[tl["branch"]["result"]]
         cards = lambda cs: " ".join(cs)
         lines += [
-            f"### Hand {no}: {d['player_short']} vs dealer {d['up']} (basic strategy: {d['best']})",
-            f"- Cards: you {cards(hand['player'])} | dealer {hand['up']} + hole {hand['hole']}",
+            f"### Mão {no}: {d['player_short']} contra {d['up']} do dealer (estratégia básica: {d['best']})",
+            f"- Cartas: você {cards(hand['player'])} | dealer {hand['up']} + escondida {hand['hole']}",
             f"- `{names[0]}` ({sec(H.EP_TOTAL)})",
-            f"- `{names[1]}` ({sec(hit['total'])}): HIT -> you {H.total_label(hit['branch']['player'])}, "
-            f"dealer {H.total_label(hit['branch']['dealer'])}: **{res(hit)}**. Corner slot until {sec(hit['lesson_start'])}.",
-            f"- `{names[2]}` ({sec(stand['total'])}): STAND -> you {H.total_label(stand['branch']['player'])}, "
-            f"dealer {H.total_label(stand['branch']['dealer'])}: **{res(stand)}**. Corner slot until {sec(stand['lesson_start'])}.",
-            "- Captions:",
-            f"  - Episode: `Hand #{no}: {d['player_short']} vs dealer {d['up']}. HIT or STAND? Pick your reel 👇 "
+            f"- `{names[1]}` ({sec(hit['total'])}): HIT → você {H.total_label(hit['branch']['player'])}, "
+            f"dealer {H.total_label(hit['branch']['dealer'])}: **{res(hit)}**. Espaço PREVIOUSLY até {sec(hit['lesson_start'])}.",
+            f"- `{names[2]}` ({sec(stand['total'])}): STAND → você {H.total_label(stand['branch']['player'])}, "
+            f"dealer {H.total_label(stand['branch']['dealer'])}: **{res(stand)}**. Espaço PREVIOUSLY até {sec(stand['lesson_start'])}.",
+            "- Legendas (copie e cole):",
+            f"  - Episódio: `Hand #{no}: {d['player_short']} vs dealer {d['up']}. HIT or STAND? Pick your reel 👇 "
             f"#blackjack #cardgames #casino #interactive`",
             f"  - HIT: `Hand #{no}: you chose HIT. Did it pay off? 🃏 #blackjack #cardgames #casino`",
             f"  - STAND: `Hand #{no}: you chose STAND. Did it pay off? 🃏 #blackjack #cardgames #casino`",
