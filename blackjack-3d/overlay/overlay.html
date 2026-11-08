@@ -244,6 +244,33 @@ const DRAW = {
     });
     g.restore();
   },
+  gridrow(e, f, L) {  // a profile-grid row: where the full hand and the other choice are
+    const rise = (1 - easeOut(L.pin)) * 30;
+    g.save(); g.globalAlpha = L.a;
+    const n = e.tiles.length, tw = e.tw || 270, th = e.th || 360, gap = e.gap || 18;
+    const x0 = W / 2 - (n * tw + (n - 1) * gap) / 2, y = e.y + rise;
+    e.tiles.forEach((t, i) => {
+      const p = clamp((f - e.t0 - i * 5) / 12);
+      if (p <= 0) return;
+      const x = x0 + i * (tw + gap), yy = y + (1 - easeOut(p)) * 24;
+      g.save(); g.globalAlpha *= easeOut(p);
+      g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = 30; g.shadowOffsetY = 10;
+      rr(x, yy, tw, th, 18); g.fillStyle = t.here ? 'rgba(20,22,24,0.9)' : 'rgba(8,9,10,0.72)'; g.fill();
+      g.shadowColor = 'transparent';
+      g.lineWidth = t.here ? 5 : 3; g.strokeStyle = t.color; g.stroke();
+      text(t.top, x + tw / 2, yy + th * 0.36, font(900, t.big || 46), t.color, { shadow: false, ls: -1 });
+      if (t.sub) text(t.sub, x + tw / 2, yy + th * 0.36 + 52, font(600, 26, BODY), 'rgba(255,255,255,0.75)', { shadow: false });
+      if (t.here) {
+        const fnt = font(800, 22, BODY), tw2 = measure('YOU ARE HERE', fnt, 3) + 34;
+        rr(x + tw / 2 - tw2 / 2, yy + th - 54, tw2, 38, 19); g.fillStyle = t.color; g.fill();
+        text('YOU ARE HERE', x + tw / 2 + 1.5, yy + th - 34, fnt, C.ink, { shadow: false, ls: 3 });
+      } else {
+        playIcon(x + tw / 2, yy + th * 0.74, 30, 1);
+      }
+      g.restore();
+    });
+    g.restore();
+  },
   lesson(e, f, L) {   // ✓ / ✗ verdict line
     const rise = (1 - easeOut(L.pin)) * 24;
     g.save(); g.globalAlpha = L.a;

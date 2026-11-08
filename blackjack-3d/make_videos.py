@@ -29,7 +29,7 @@ INTRO_ZOOM = 1.08                      # intro still is rendered 8% wider: ends 
 HOLD_ZOOM = (1.0, 1.10)                # slow push-in on the hold plate (110% overscan)
 OUT_ZOOM = (1.0, 1.06)
 TR_HOLD = 195                          # trailer hold length (frames)
-END_SCREEN = 180                       # "what's next" screen at the end of the HIT / STAND videos
+END_SCREEN = 150                       # "full hand on my profile" screen at the end of HIT / STAND
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -280,18 +280,17 @@ def outcome_plan(no, hand, anchors, action):
         e["t0"], e["t1"] = disp(e["t0"]), disp(e["t1"])
         for st in e.get("states", []):
             st["f"] = disp(st["f"])
-    # end screen: go back to the hand, or see the other choice
-    other = "STAND" if action == "HIT" else "HIT"
-    ocol = COL["hit"] if other == "HIT" else COL["stand"]
+    # end screen: no reel boxes here (these reels are posted before the episode exists).
+    # It shows where the full hand and the other choice are: the same row of the profile grid.
     es = end_start
+    tiles = [dict(top=f"HAND {no}", sub="the full hand", color=COL["gold"], big=50),
+             dict(top="HIT", sub="if you hit", color=COL["hit"], here=action == "HIT", big=60),
+             dict(top="STAND", sub="if you stood", color=COL["stand"], here=action == "STAND", big=60)]
     E += [
-        title([[seg("WHAT'S NEXT?", 104)]], 330, es + 4, D, rise=30),
-        title([[body("Go back to the hand, or see the other choice", 38)]], 432, es + 10, D, rise=20),
-        dict(type="slot", label="THE HAND", lsize=34, color=COL["gold"], x=130, y=560, w=380, h=676,
-             t0=es + 14, t1=D, fin=14),
-        dict(type="slot", label=f"IF YOU {'HIT' if other == 'HIT' else 'STOOD'}", lsize=34, color=ocol,
-             x=570, y=560, w=380, h=676, t0=es + 20, t1=D, fin=14),
-        tag(f"FOLLOW FOR HAND {no + 1}", 1330, es + 28, D, size=30),
+        title([[seg("WATCH THE FULL HAND", 76)]], 360, es + 4, D, rise=30),
+        title([[body("Same row on my profile", 42, w=700)]], 466, es + 10, D, rise=20),
+        dict(type="gridrow", y=600, tiles=tiles, tw=290, th=386, gap=20, t0=es + 14, t1=D, fin=12),
+        tag(f"FOLLOW FOR HAND {no + 1}", 1150, es + 34, D, size=30),
     ]
     return dict(frames=D, zoom=zoom, elements=E, blur=(disp(ls), D), src=src, end_start=es)
 
@@ -400,8 +399,8 @@ def outcome_sound(no, hand, action):
     m.add("cardFan2", tl["lesson_start"] - 6, -9.0)
     m.add("chipLay2", tl["lesson_start"] + 22, -14.0)
     add("cardFan1", end_start - 2, -8.0)              # display frames from here on
-    add("chipLay2", end_start + 14, -13.0, -0.3)
-    add("chipLay1", end_start + 20, -13.0, 0.3)
+    for i, pan in enumerate((-0.3, 0.0, 0.3)):
+        add(f"chipLay{i + 1}", end_start + 14 + i * 5, -13.0, pan)
     return m, len(src)
 
 
@@ -615,33 +614,28 @@ def write_guide(videos):
         "público internacional.", "",
         "## Primeiro post",
         "`00_series_trailer.mp4`: explica como a série funciona. Poste antes de tudo e fixe no perfil.", "",
-        "## O ovo e a galinha: em que ordem postar",
-        "Um link só pode apontar para um reel que já existe. Então cada mão é postada de trás para frente: "
-        "primeiro os finais, por último a pergunta.",
-        "1. **STAND** (`handNN_3_stand.mp4`)",
-        "2. **HIT** (`handNN_2_hit.mp4`)",
-        "3. **Episódio** (`handNN_1_episode.mp4`). Como HIT e STAND já existem, você vincula o episódio a eles.",
+        "## Regra das caixinhas",
+        "Uma caixinha só pode mostrar um reel que **já foi postado**. Por isso as caixinhas ficam só no "
+        "**episódio**, que é o último a ser postado de cada mão. Os vídeos HIT e STAND **não têm caixinha**: "
+        "no fim, eles mostram onde está a mão completa no perfil (a mesma fileira do grid).", "",
+        "## Ordem para postar cada mão",
+        "1. **STAND** (`handNN_3_stand.mp4`): sem caixinhas, só capa e legenda.",
+        "2. **HIT** (`handNN_2_hit.mp4`): sem caixinhas, só capa e legenda.",
+        "3. **Episódio** (`handNN_1_episode.mp4`), por último. Agora HIT e STAND já existem, então você "
+        "coloca nas caixinhas:",
+        f"   - tela final, moldura verde (esquerda) → o reel **HIT** que você acabou de postar; moldura vermelha "
+        f"(direita) → o reel **STAND**. De {sec(ep_end0)} até o fim ({sec(H.EP_TOTAL)}).",
+        f"   - da mão 2 em diante, canto **PREVIOUSLY** (superior esquerdo) → o **episódio da mão anterior**, "
+        f"de 0.2s a {sec(ep_corner_end)}.",
         "",
-        "Assim, no perfil, cada mão vira uma fileira certinha do grid: **episódio | HIT | STAND**. Mesmo para "
-        "quem não clica em link, a escolha fica \"logo ao lado\". Para manter as fileiras alinhadas, poste "
-        "sempre os 3 de cada mão, sem outros posts no meio.",
+        "Postando nessa ordem, cada mão vira uma fileira no perfil: **episódio | HIT | STAND**, exatamente o que "
+        "a tela final dos vídeos HIT/STAND mostra. Poste sempre os 3 de cada mão, sem outro post no meio, para "
+        "as fileiras não desalinharem.",
         "",
-        "Os links que voltam (do HIT/STAND para o episódio) só dá para pôr depois que o episódio existe: edite "
-        "os reels HIT e STAND e adicione o link para o episódio. Se o app não deixar editar o link, fixe um "
-        "comentário neles: `Full hand: the reel right before this one on my profile`.",
-        "",
-        "Os **espaços dentro dos vídeos** não são links, são só a vitrine: no Edits, você coloca neles os "
-        "próprios arquivos de vídeo (que você já tem), então não depende de nada estar postado.", "",
-        "## Espaços dentro dos vídeos (pixels no quadro 1080x1920)",
-        f"- **Episódio, canto PREVIOUSLY** (mão 2 em diante): x {sc['x']}-{sc['x'] + sc['w']}, "
-        f"y {sc['y']}-{sc['y'] + sc['h']} ({sc['w']}x{sc['h']}, 9:16), de 0.2s a {sec(ep_corner_end)}. "
-        "Coloque o episódio da mão anterior.",
-        f"- **Episódio, tela final**: HIT à esquerda (x 130-510, y 560-1236, 380x676) e STAND à direita "
-        f"(x 570-950, mesma altura), de {sec(ep_end0)} até o fim ({sec(H.EP_TOTAL)}). Coloque os vídeos HIT e STAND.",
-        "- **HIT/STAND, tela final \"WHAT'S NEXT?\"**: mesmas posições. Esquerda **THE HAND** (coloque o "
-        "episódio), direita **a outra escolha** (no vídeo HIT, coloque o STAND, e vice-versa). Os tempos "
-        "estão em cada mão abaixo.",
-        "- Enquete (opcional): durante \"HIT or STAND?\" no episódio, o meio da mesa (y ~760-1000) fica livre.",
+        "## Posição das caixinhas no episódio (pixels no quadro 1080x1920)",
+        f"- PREVIOUSLY: x {sc['x']}-{sc['x'] + sc['w']}, y {sc['y']}-{sc['y'] + sc['h']} ({sc['w']}x{sc['h']}, 9:16).",
+        "- HIT: x 130-510, y 560-1236 (380x676). STAND: x 570-950, y 560-1236 (380x676).",
+        "- Enquete (opcional): durante \"HIT or STAND?\" (7.6s-12.0s) o meio da mesa (y ~760-1000) fica livre.",
         "", "## Mãos", "",
     ]
     for no, hand in enumerate(H.HANDS, 1):
@@ -661,7 +655,7 @@ def write_guide(videos):
             src, disp, es = outcome_display(tl)
             b = tl["branch"]
             lines.append(f"- `{name}` ({sec(len(src))}): {action} → você {H.total_label(b['player'])}, dealer "
-                         f"{H.total_label(b['dealer'])}: **{res(b)}**. Tela final de {sec(es + 14)} a {sec(len(src))}.")
+                         f"{H.total_label(b['dealer'])}: **{res(b)}**.")
         lines += [
             "- Legendas (copie e cole):",
             f"  - Episódio: `Hand #{no}: {d['player_short']} vs dealer {d['up']}. HIT or STAND? Comment your move, "
