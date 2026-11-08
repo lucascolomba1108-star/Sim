@@ -667,6 +667,75 @@ def write_guide(videos):
     open(os.path.join(videos, "GUIDE.md"), "w").write("\n".join(lines))
 
 
+TAGS = "#blackjack #cardgames #casino #21 #interactive"
+
+
+def post_texts(no, hand):
+    """Captions and pinned comments (English, for the international audience)."""
+    d = H.describe(hand)
+    situation = f"you have {d['player_short']}, the dealer shows {d['up']}"
+    return {
+        "trailer": dict(
+            caption=("Interactive Blackjack 🃏 Every hand, YOU make the call: HIT or STAND? "
+                     "Then watch what happens. Follow so you don't miss a hand.\n\n" + TAGS),
+            comment="Which blackjack spot should we play next? Drop your toughest hand 👇"),
+        "stand": dict(
+            caption=(f"Hand #{no}: you chose STAND. Did it pay off? 🃏\n\n"
+                     f"The full hand and the HIT version are in the same row on my profile.\n\n" + TAGS),
+            comment="Would you have stood too? 🔴 Or would you hit? 🟢 Tell me 👇"),
+        "hit": dict(
+            caption=(f"Hand #{no}: you chose HIT. Did it pay off? 🃏\n\n"
+                     f"The full hand and the STAND version are in the same row on my profile.\n\n" + TAGS),
+            comment="Would you have hit too? 🟢 Or would you stand? 🔴 Tell me 👇"),
+        "episode": dict(
+            caption=(f"Hand #{no}: {situation}. HIT or STAND? 🃏\n"
+                     f"Comment your move, then watch your reel at the end 👇\n\n" + TAGS),
+            comment="🟢 HIT or 🔴 STAND? Comment your call BEFORE you watch your reel 👀"),
+    }
+
+
+def write_manual(videos, no, hand):
+    """handNN_POSTAR.md: everything needed to post one hand, in order (Portuguese)."""
+    d = H.describe(hand)
+    t = post_texts(no, hand)
+    c0 = H.EP_INTRO + H.EP_CRANE
+    box0, corner1 = (c0 + H.EP_HOLD + 14) / FPS, (c0 + 82 + 12) / FPS
+    hit, stand = H.play(hand, "HIT"), H.play(hand, "STAND")
+    res = {"win": "ganha", "lose": "perde", "bust": "estoura", "push": "empata"}
+    fmt = lambda x: f"{x:.1f}".replace(".", ",")
+
+    def block(title, video, cover, edits, key, extra=()):
+        out = [f"## {title}", f"- **Vídeo:** `{video}`", f"- **Capa:** `{cover}` (em \"Editar capa\", escolha da galeria)",
+               f"- **No Edits:** {edits}", "- **Legenda:**", "```", t[key]["caption"], "```",
+               "- **Comentário fixado** (comente logo depois de postar e fixe):", "```", t[key]["comment"], "```"]
+        return out + list(extra) + [""]
+
+    L = [f"# Mão {no}: como postar ({d['player_short']} contra {d['up']} do dealer)", "",
+         f"No HIT você {res[hit['result']]}; no STAND você {res[stand['result']]}. "
+         f"Estratégia básica: **{d['best']}**.", "",
+         "**Ordem:** " + ("trailer → " if no == 1 else "") + "STAND → HIT → episódio. "
+         "Poste os 3 da mão em sequência, sem outro post no meio (cada mão vira uma fileira do perfil: "
+         "episódio | HIT | STAND).", ""]
+    if no == 1:
+        L += block("Antes de tudo: trailer da série (só uma vez)", "00_series_trailer.mp4", "00_series_trailer_cover.jpg",
+                   "só a música. Não tem caixinha.", "trailer",
+                   ["- **Depois de postar:** fixe o trailer no perfil (menu ⋯ do post → Fixar no perfil)."])
+    L += block("Post 1: STAND", f"hand{no:02d}_3_stand.mp4", f"hand{no:02d}_3_stand_cover.jpg",
+               "só a música (se ela brigar com os efeitos, baixe um pouco o áudio original). Não tem caixinha.", "stand")
+    L += block("Post 2: HIT", f"hand{no:02d}_2_hit.mp4", f"hand{no:02d}_2_hit_cover.jpg",
+               "só a música. Não tem caixinha.", "hit")
+    edits = (f"música + as caixinhas da tela final, de {fmt(box0)} s até o fim ({fmt(H.EP_TOTAL / FPS)} s): "
+             f"**moldura verde (esquerda) = o reel HIT** que você postou no post 2; "
+             f"**moldura vermelha (direita) = o reel STAND** do post 1.")
+    if no > 1:
+        edits += (f" E no **canto PREVIOUSLY** (em cima, à esquerda), de 0,2 s a {fmt(corner1)} s: "
+                  f"**o episódio da mão {no - 1}**.")
+    L += block("Post 3: episódio (por último)", f"hand{no:02d}_1_episode.mp4", f"hand{no:02d}_1_episode_cover.jpg",
+               edits, "episode",
+               ["- **Opcional:** sticker de enquete \"HIT / STAND\" no meio da mesa (fica livre de 7,6 s a 12 s)."])
+    open(os.path.join(videos, f"hand{no:02d}_POSTAR.md"), "w").write("\n".join(L))
+
+
 def trailer_plan(no, hand, anchors):
     """'How it works' reel for the series (pin it first). Reuses the intro, crane and hold of a hand."""
     n = H.EP_INTRO + H.EP_CRANE + TR_HOLD
@@ -723,6 +792,25 @@ def cover_plans(no, hand, anchors):
     return plans
 
 
+def make_trailer_cover(R, out_dir):
+    intro = Image.open(os.path.join(R.shared, "intro.png")).convert("RGB")
+    bg = zoomed(intro, 1.04)
+    on = dict(t0=-100, t1=100, fin=0, fout=0)
+    plan = dict(frames=1, zoom=[1.0], elements=[
+        dict(type="scrim", top=700, full=0.3, **on),
+        dict(tag("INTERACTIVE BLACKJACK", 640, 0, 0), **on),
+        dict(title([[seg("YOU MAKE", 124)], [seg("THE CALL.", 124, COL["gold"])]], 790, 0, 0, lh=128), **on),
+        dict(title([[seg("HIT", 84, COL["hit"]), seg("or", 40, w=700, dy=6), seg("STAND?", 84, COL["stand"])]],
+                   1060, 0, 0, gap=16), **on),
+        dict(title([[body("Every hand, you decide.", 42, w=700)]], 1170, 0, 0), **on),
+    ])
+    with tempfile.TemporaryDirectory() as tmp:
+        od = render_overlay(plan, tmp)
+        frame = bg.convert("RGBA")
+        frame.alpha_composite(Image.open(os.path.join(od, "0000.png")))
+        frame.convert("RGB").save(os.path.join(out_dir, "00_series_trailer_cover.jpg"), quality=95)
+
+
 def make_covers(R, no, hand, anchors, out_dir):
     bg = zoomed(to_img(R.hold_full()), 1.0)
     for name, plan in cover_plans(no, hand, anchors).items():
@@ -747,6 +835,12 @@ def main():
     anchors = R.meta["anchors"]
     os.makedirs(a.out, exist_ok=True)
     only = a.only.split(",")
+    if "manual" in only:                    # posting manual (+ trailer cover for hand 1) only
+        write_manual(a.out, no, hand)
+        if no == 1:
+            make_trailer_cover(R, a.out)
+        print(f"manual written for hand {no}", flush=True)
+        return
     if "sound" in only:                     # add/refresh the audio of existing videos only
         add_sound(no, hand, a.out)
         print(f"sound added to hand {no}", flush=True)
@@ -768,6 +862,7 @@ def main():
             print("wrote", out, flush=True)
     add_sound(no, hand, a.out, which=only)
     make_covers(R, no, hand, anchors, a.out)
+    write_manual(a.out, no, hand)
     write_guide(a.out)
 
 
