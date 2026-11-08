@@ -39,3 +39,13 @@ Cada mão tem 3 Reels (1080x1920, 30 fps, sem áudio: coloque a música no Edits
   - Episódio: `Hand #2: soft 18 vs dealer 9. HIT or STAND? Pick your reel 👇 #blackjack #cardgames #casino #interactive`
   - HIT: `Hand #2: you chose HIT. Did it pay off? 🃏 #blackjack #cardgames #casino`
   - STAND: `Hand #2: you chose STAND. Did it pay off? 🃏 #blackjack #cardgames #casino`
+
+### Mão 3: 12 contra 4 do dealer (estratégia básica: STAND)
+- Cartas: você 9C 3D | dealer 4S + escondida 10H
+- `hand03_1_episode.mp4` (15.0s)
+- `hand03_2_hit.mp4` (12.1s): HIT → você BUST, dealer 14: **ESTOURA (BUST)**. Espaço PREVIOUSLY até 8.1s.
+- `hand03_3_stand.mp4` (12.0s): STAND → você 12, dealer BUST: **GANHA**. Espaço PREVIOUSLY até 8.0s.
+- Legendas (copie e cole):
+  - Episódio: `Hand #3: 12 vs dealer 4. HIT or STAND? Pick your reel 👇 #blackjack #cardgames #casino #interactive`
+  - HIT: `Hand #3: you chose HIT. Did it pay off? 🃏 #blackjack #cardgames #casino`
+  - STAND: `Hand #3: you chose STAND. Did it pay off? 🃏 #blackjack #cardgames #casino`
